@@ -183,7 +183,7 @@ export const AddMemorialModal: React.FC<AddMemorialModalProps> = ({
           </label>
           {fileError && <div style={{ fontSize: '0.8rem', color: '#9c3a2b' }}>{fileError}</div>}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <div className="responsive-grid-2">
             <div>
               <label htmlFor="pet-name" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 500, marginBottom: '0.35rem' }}>
                 Nombre *
@@ -231,7 +231,7 @@ export const AddMemorialModal: React.FC<AddMemorialModalProps> = ({
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.65rem' }}>
+          <div className="responsive-grid-3">
             <div>
               <label htmlFor="pet-birth" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 500, marginBottom: '0.3rem' }}>
                 Nacimiento (opcional)

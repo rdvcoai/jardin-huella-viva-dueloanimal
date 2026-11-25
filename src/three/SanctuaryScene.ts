@@ -8,7 +8,7 @@ interface MemorialObject {
   memorial: Memorial;
   group: THREE.Group;
   hitMesh: THREE.Mesh;
-  bookHitMesh: THREE.Mesh;
+  bookHitMesh?: THREE.Mesh;
   flameMesh: THREE.Mesh;
   flameLight: THREE.PointLight;
   leftDoorPivot: THREE.Group;
@@ -112,6 +112,7 @@ export class SanctuaryScene {
   private vintageBulbLights: THREE.PointLight[] = [];
   private floatingLanterns: { group: THREE.Group; baseY: number; phase: number }[] = [];
   private dayBirds: { group: THREE.Group; leftWing: THREE.Mesh; rightWing: THREE.Mesh; center: THREE.Vector3; radius: number; speed: number; angle: number }[] = [];
+  private whiteButterflies: { group: THREE.Group; leftWing: THREE.Group; rightWing: THREE.Group; center: THREE.Vector3; radiusX: number; radiusZ: number; speed: number; phase: number }[] = [];
   private floatingSpotifyBadge?: THREE.Group;
   private nextShootingStarAt = 300; // 5 minutos (300 segundos) conectado
 
@@ -128,17 +129,21 @@ export class SanctuaryScene {
 
     const width = container.clientWidth || window.innerWidth;
     const height = container.clientHeight || window.innerHeight;
+    const aspect = width / Math.max(1, height);
+    const isNarrowOrTouch = width < 1024 || 'ontouchstart' in window;
+    const initialFov = aspect < 0.85 ? 64 : aspect < 1.15 ? 58 : 52;
 
-    this.camera = new THREE.PerspectiveCamera(52, width / height, 0.1, 340);
+    this.camera = new THREE.PerspectiveCamera(initialFov, aspect, 0.1, 340);
     this.camera.position.copy(this.camPos);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, isNarrowOrTouch ? 1.5 : 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
+    this.renderer.domElement.style.touchAction = 'none';
     container.appendChild(this.renderer.domElement);
 
     this.buildSkyAndCelestial();
@@ -152,8 +157,10 @@ export class SanctuaryScene {
     this.buildCentralContemplationCircle();
     this.buildWaterFeatures();
     this.buildPodcastBench();
+    this.buildMemorialQuotesSigns();
     this.buildFloatingLanterns();
     this.buildDaytimeBirds();
+    this.buildWhiteButterflies();
     this.buildSunMotes();
     this.buildWalkRipple();
 
@@ -195,7 +202,7 @@ export class SanctuaryScene {
     if (this.reducedMotion) {
       this.leftGatePivot.rotation.y = -Math.PI * 0.48;
       this.rightGatePivot.rotation.y = Math.PI * 0.48;
-      this.camPos.set(0, 1.75, -3.5);
+      this.camPos.set(0, 1.75, 0.6);
       this.targetCamPos.copy(this.camPos);
       this.isEntered = true;
       this.callbacks.onEnterComplete();
@@ -233,17 +240,17 @@ export class SanctuaryScene {
 
   public resetView(): void {
     if (!this.isEntered) return;
-    this.targetCamPos.set(0, this.getTerrainHeight(0, -3.5) + 1.75, -3.5);
+    this.targetCamPos.set(0, this.getTerrainHeight(0, 0.6) + 1.75, 0.6);
     this.targetYaw = 0;
-    this.targetPitch = 0.03;
+    this.targetPitch = 0.02;
   }
 
   private getAltarPlacement(indexInSanctuary: number): { pos: [number, number, number]; rotY: number } {
     const side = indexInSanctuary % 2 === 0 ? -1 : 1;
     const row = Math.floor(indexInSanctuary / 2); // 0..14 (15 rows * 2 sides = 30 altars)
-    const x = side * 5.6;
-    const z = -2.8 - row * 2.8;
-    const rotY = side === -1 ? Math.PI / 2 : -Math.PI / 2;
+    const x = side * 3.95;
+    const z = -3.6 - row * 2.85;
+    const rotY = side === -1 ? Math.PI * 0.36 : -Math.PI * 0.36;
     return { pos: [x, 0.13, z], rotY };
   }
 
@@ -482,13 +489,15 @@ export class SanctuaryScene {
     );
     this.rainbowSignMesh.position.set(-14, 24, -103);
     this.rainbowSignMesh.rotation.y = 0.14;
+    this.rainbowSignMesh.userData = { isRainbow: true };
     this.scene.add(this.rainbowSignMesh);
 
+    // Exact arc hit mesh matching only the rainbow arch itself (never the empty sky)
     this.rainbowHitMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(92, 52),
-      new THREE.MeshBasicMaterial({ visible: false })
+      new THREE.RingGeometry(36, 48, 48, 1, 0, Math.PI),
+      new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide })
     );
-    this.rainbowHitMesh.position.set(-14, 24, -102);
+    this.rainbowHitMesh.position.set(-14, -2, -107);
     this.rainbowHitMesh.rotation.y = 0.14;
     this.rainbowHitMesh.userData = { isRainbow: true };
     this.scene.add(this.rainbowHitMesh);
@@ -552,7 +561,8 @@ export class SanctuaryScene {
     this.dirLight = new THREE.DirectionalLight('#ffe6be', 1.85);
     this.dirLight.position.set(18, 22, -48);
     this.dirLight.castShadow = true;
-    this.dirLight.shadow.mapSize.set(2048, 2048);
+    const isNarrowOrTouch = window.innerWidth < 1024 || 'ontouchstart' in window;
+    this.dirLight.shadow.mapSize.set(isNarrowOrTouch ? 1024 : 2048, isNarrowOrTouch ? 1024 : 2048);
     this.dirLight.shadow.camera.near = 1;
     this.dirLight.shadow.camera.far = 120;
     this.dirLight.shadow.camera.left = -32;
@@ -855,10 +865,29 @@ export class SanctuaryScene {
 
       const lanternGlass = new THREE.Mesh(
         new THREE.CylinderGeometry(0.15, 0.12, 0.28, 6),
-        new THREE.MeshBasicMaterial({ color: '#ffefc8', transparent: true, opacity: 0.88 })
+        new THREE.MeshBasicMaterial({ color: '#ffefc8', transparent: true, opacity: 0.42 })
       );
       lanternGlass.position.set(px, 4.52, gateZ);
       this.scene.add(lanternGlass);
+
+      const pillarCandle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.032, 0.036, 0.12, 10),
+        new THREE.MeshStandardMaterial({ color: '#fbf5ea', roughness: 0.7 })
+      );
+      pillarCandle.position.set(px, 4.44, gateZ);
+      this.scene.add(pillarCandle);
+
+      const pillarFlame = new THREE.Mesh(
+        new THREE.SphereGeometry(0.026, 8, 8),
+        new THREE.MeshBasicMaterial({ color: '#ffe07d' })
+      );
+      pillarFlame.position.set(px, 4.53, gateZ);
+      pillarFlame.scale.set(0.85, 1.45, 0.85);
+      this.scene.add(pillarFlame);
+
+      const pillarGlow = new THREE.PointLight('#ffdca0', 0.6, 5.0, 1.8);
+      pillarGlow.position.set(px, 4.55, gateZ);
+      this.scene.add(pillarGlow);
 
       const lanternRoof = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.18, 6), ironMat);
       lanternRoof.position.set(px, 4.74, gateZ);
@@ -975,6 +1004,347 @@ export class SanctuaryScene {
 
     this.scene.add(this.leftGatePivot);
     this.scene.add(this.rightGatePivot);
+
+    this.buildEntranceFloorLanterns(gateZ);
+  }
+
+  private buildEntranceFloorLanterns(gateZ: number): void {
+    const placements: Array<{ x: number; z: number; scale: number; withLight: boolean }> = [
+      { x: -1.95, z: gateZ + 1.55, scale: 1.05, withLight: true },
+      { x: 1.95, z: gateZ + 1.55, scale: 1.05, withLight: true },
+      { x: -2.85, z: gateZ + 0.72, scale: 0.88, withLight: true },
+      { x: 2.85, z: gateZ + 0.72, scale: 0.88, withLight: true },
+      { x: -1.95, z: gateZ - 0.75, scale: 0.92, withLight: true },
+      { x: 1.95, z: gateZ - 0.75, scale: 0.92, withLight: true },
+    ];
+
+    placements.forEach(({ x, z, scale, withLight }) => {
+      const lantern = this.createFloorLantern(scale, withLight);
+      const baseY = z <= gateZ ? 0.13 : Math.max(0.02, this.getTerrainHeight(x, z));
+      lantern.position.set(x, baseY, z);
+      lantern.rotation.y = x < 0 ? 0.28 : -0.28;
+      this.scene.add(lantern);
+    });
+  }
+
+  private createFloorLantern(scale = 1, withLight = false): THREE.Group {
+    const group = new THREE.Group();
+    const ironMat = new THREE.MeshStandardMaterial({ color: '#3b4845', roughness: 0.45, metalness: 0.45 });
+    const bronzeMat = new THREE.MeshStandardMaterial({ color: '#b59a62', roughness: 0.35, metalness: 0.65 });
+    const stoneMat = new THREE.MeshStandardMaterial({ color: '#ebe4d8', roughness: 0.82 });
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: '#fffaf0',
+      emissive: '#ffd58a',
+      emissiveIntensity: 0.22,
+      transparent: true,
+      opacity: 0.28,
+      roughness: 0.06,
+      clearcoat: 1.0,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const candleMat = new THREE.MeshStandardMaterial({ color: '#fbf5ea', roughness: 0.72 });
+    const flameMat = new THREE.MeshBasicMaterial({ color: '#ffdf7e' });
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: '#ffd984',
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false,
+    });
+
+    // Small stone plinth
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.42), stoneMat);
+    plinth.position.y = 0.04;
+    plinth.castShadow = true;
+    plinth.receiveShadow = true;
+    group.add(plinth);
+
+    // Lantern base frame
+    const base = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.06, 0.32), ironMat);
+    base.position.y = 0.11;
+    group.add(base);
+
+    // 4 corner posts
+    [
+      [-0.13, -0.13],
+      [0.13, -0.13],
+      [-0.13, 0.13],
+      [0.13, 0.13],
+    ].forEach(([cx, cz]) => {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.46, 0.025), ironMat);
+      post.position.set(cx, 0.37, cz);
+      post.castShadow = true;
+      group.add(post);
+    });
+
+    // Warm frosted glass body
+    const glassBox = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.44, 0.24), glassMat);
+    glassBox.position.y = 0.37;
+    group.add(glassBox);
+
+    // Candle + glowing flame + soft warm halo inside
+    const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.054, 0.22, 12), candleMat);
+    candle.position.y = 0.25;
+    group.add(candle);
+
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.036, 10, 10), flameMat);
+    flame.position.y = 0.39;
+    flame.scale.set(0.85, 1.5, 0.85);
+    group.add(flame);
+
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 10), haloMat);
+    halo.position.y = 0.39;
+    group.add(halo);
+
+    // Stepped vintage roof + bronze finial ring
+    const roofRim = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.04, 0.34), ironMat);
+    roofRim.position.y = 0.61;
+    group.add(roofRim);
+
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(0.23, 0.19, 4), ironMat);
+    roof.position.y = 0.725;
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
+    group.add(roof);
+
+    const finial = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.01, 6, 12), bronzeMat);
+    finial.position.y = 0.85;
+    group.add(finial);
+
+    if (withLight) {
+      const glow = new THREE.PointLight('#ffdca0', 0.9, 6.5, 1.8);
+      glow.position.set(0, 0.42, 0);
+      group.add(glow);
+    }
+
+    group.scale.setScalar(scale);
+    return group;
+  }
+
+  private buildMemorialQuotesSigns(): void {
+    const quotes = [
+      'No dejaron solo huellas en el piso; sembraron un hogar entero en el corazón.',
+      'El amor que compartimos no termina; solo cambia de lugar para vivir en nosotros.',
+      'Cada paseo, cada mirada y cada siesta juntos sigue latiendo en este jardín.',
+      'Quien nos enseñó a amar sin condiciones nunca se va del todo.',
+      'Tu recuerdo es una luz serena que nos acompaña en cada paso.',
+      'Gracias por tantos años de compañía fiel, alegría y ternura.',
+      'En cada brisa suave y en cada flor sembrada seguimos honrando tu vida.',
+      'El vínculo verdadero permanece intacto más allá del tiempo.',
+    ];
+
+    const ironMat = new THREE.MeshStandardMaterial({
+      color: '#e6c36a',
+      emissive: '#8f6b1e',
+      emissiveIntensity: 0.18,
+      roughness: 0.22,
+      metalness: 0.85,
+    });
+    const bronzeMat = new THREE.MeshStandardMaterial({
+      color: '#f2d98d',
+      emissive: '#9c7826',
+      emissiveIntensity: 0.16,
+      roughness: 0.2,
+      metalness: 0.88,
+    });
+
+    const pastelThemes = [
+      { bg: '#f2eafb', border: '#c7a8ec', accent: '#9f75d6' }, // lila pastel
+      { bg: '#e5f8f5', border: '#7bd8d2', accent: '#06ada2' }, // verde menta
+      { bg: '#fdeef3', border: '#f0b6ca', accent: '#d97c9b' }, // rosa pastel
+      { bg: '#eceefa', border: '#b4bee8', accent: '#7a89cc' }, // lavanda suave
+      { bg: '#fdf2eb', border: '#f0c7ad', accent: '#d48d68' }, // durazno pastel
+      { bg: '#e8f6ef', border: '#98d9b8', accent: '#4da379' }, // menta suave
+      { bg: '#f9ebf0', border: '#e3b0c4', accent: '#c27091' }, // rosa empolvado
+      { bg: '#f4eef9', border: '#cfb5e8', accent: '#9a74c9' }, // lila perla
+    ];
+
+    const zRows = [-4.2, -9.0, -13.8, -18.6];
+
+    quotes.forEach((quote, idx) => {
+      const side = idx % 2 === 0 ? -1 : 1;
+      const row = Math.floor(idx / 2);
+      const sx = side * 2.25;
+      const sz = zRows[row % zRows.length];
+      const ceilingY = 4.55;
+      const barY = 3.45;
+      const plaqueY = 2.66;
+      const isOval = idx % 2 === 0;
+
+      const signGroup = new THREE.Group();
+      signGroup.position.set(sx, 0, sz);
+      signGroup.rotation.y = side * -0.34;
+
+      // Vertical ceiling support rods up to the pavilion roof
+      [-0.55, 0.55].forEach((rx) => {
+        const rodH = ceilingY - barY;
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, rodH, 6), ironMat);
+        rod.position.set(rx, barY + rodH / 2, 0);
+        signGroup.add(rod);
+      });
+
+      // Vintage horizontal wrought-iron bar with spear finial on the inner tip
+      const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 1.56, 8), ironMat);
+      bar.rotation.z = Math.PI / 2;
+      bar.position.set(0, barY, 0);
+      signGroup.add(bar);
+
+      const spearTip = new THREE.Mesh(new THREE.ConeGeometry(0.048, 0.14, 4), ironMat);
+      spearTip.rotation.z = side === -1 ? -Math.PI / 2 : Math.PI / 2;
+      spearTip.position.set(side === -1 ? 0.82 : -0.82, barY, 0);
+      signGroup.add(spearTip);
+
+      // Ornate vintage scrollwork curls on the bar
+      [-0.36, 0.36].forEach((cx) => {
+        const scroll = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.01, 6, 14, Math.PI * 1.35), bronzeMat);
+        scroll.position.set(cx, barY - 0.08, 0);
+        scroll.rotation.z = cx < 0 ? 0.4 : Math.PI - 0.4;
+        signGroup.add(scroll);
+      });
+
+      // Delicate chain links suspending the vintage plaque
+      const chainX = isOval ? [-0.34, 0.34] : [-0.46, 0.46];
+      const chainTop = barY;
+      const chainBottom = plaqueY + 0.32;
+      const linksCount = 7;
+      chainX.forEach((cx) => {
+        for (let l = 0; l < linksCount; l++) {
+          const ly = THREE.MathUtils.lerp(chainBottom, chainTop, (l + 0.5) / linksCount);
+          const link = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0055, 6, 10), ironMat);
+          link.position.set(cx, ly, 0);
+          link.rotation.y = l % 2 === 0 ? 0 : Math.PI / 2;
+          signGroup.add(link);
+        }
+      });
+
+      // Decorative crest scroll above the plaque
+      const crest = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.012, 6, 16, Math.PI), ironMat);
+      crest.position.set(0, plaqueY + 0.33, 0);
+      signGroup.add(crest);
+
+      const theme = pastelThemes[idx % pastelThemes.length];
+      const tex = this.createQuoteSignTexture(quote, theme, isOval ? 'oval' : 'baroque');
+      const faceMat = new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        alphaTest: 0.15,
+        side: THREE.DoubleSide,
+      });
+
+      const plaquePlane = new THREE.Mesh(new THREE.PlaneGeometry(1.42, 0.78), faceMat);
+      plaquePlane.position.set(0, plaqueY, 0);
+      signGroup.add(plaquePlane);
+
+      this.scene.add(signGroup);
+    });
+  }
+
+  private createQuoteSignTexture(
+    quote: string,
+    theme: { bg: string; border: string; accent: string },
+    shape: 'oval' | 'baroque' = 'oval'
+  ): THREE.CanvasTexture {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1280;
+    canvas.height = 704;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+
+    const traceShape = (inset = 0) => {
+      ctx.beginPath();
+      if (shape === 'oval') {
+        ctx.ellipse(cx, cy, 590 - inset, 304 - inset, 0, 0, Math.PI * 2);
+      } else {
+        const rx = 572 - inset;
+        const ry = 284 - inset;
+        ctx.moveTo(cx, cy - ry - 28);
+        ctx.bezierCurveTo(cx + 170, cy - ry - 28, cx + 220, cy - ry + 36, cx + rx - 56, cy - ry + 36);
+        ctx.quadraticCurveTo(cx + rx + 24, cy - ry + 36, cx + rx, cy - 76);
+        ctx.quadraticCurveTo(cx + rx + 36, cy, cx + rx, cy + 76);
+        ctx.quadraticCurveTo(cx + rx + 24, cy + ry - 36, cx + rx - 56, cy + ry - 36);
+        ctx.bezierCurveTo(cx + 220, cy + ry - 36, cx + 170, cy + ry + 28, cx, cy + ry + 28);
+        ctx.bezierCurveTo(cx - 170, cy + ry + 28, cx - 220, cy + ry - 36, cx - rx + 56, cy + ry - 36);
+        ctx.quadraticCurveTo(cx - rx - 24, cy + ry - 36, cx - rx, cy + 76);
+        ctx.quadraticCurveTo(cx - rx - 36, cy, cx - rx, cy - 76);
+        ctx.quadraticCurveTo(cx - rx - 24, cy - ry + 36, cx - rx + 56, cy - ry + 36);
+        ctx.bezierCurveTo(cx - 220, cy - ry + 36, cx - 170, cy - ry - 28, cx, cy - ry - 28);
+        ctx.closePath();
+      }
+    };
+
+    traceShape(0);
+    ctx.fillStyle = theme.bg;
+    ctx.fill();
+
+    // Outer bright shining gold border
+    const goldGrad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    goldGrad.addColorStop(0, '#f7e296');
+    goldGrad.addColorStop(0.28, '#d4af37');
+    goldGrad.addColorStop(0.55, '#fae7a5');
+    goldGrad.addColorStop(0.8, '#c59b27');
+    goldGrad.addColorStop(1, '#f7e296');
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = goldGrad;
+    ctx.stroke();
+
+    // Inner pastel filigree border
+    traceShape(24);
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = theme.border;
+    ctx.stroke();
+
+    // Crisp paw emblem at top center
+    ctx.fillStyle = theme.accent;
+    ctx.beginPath();
+    ctx.arc(cx, 128, 15, 0, Math.PI * 2);
+    ctx.fill();
+    [
+      [cx - 28, 102],
+      [cx - 10, 90],
+      [cx + 10, 90],
+      [cx + 28, 102],
+    ].forEach(([px, py]) => {
+      ctx.beginPath();
+      ctx.arc(px, py, 7, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    ctx.fillStyle = '#2d2622';
+    ctx.font = 'italic 600 44px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Word-wrap quote cleanly into centered lines
+    const words = quote.split(' ');
+    const lines: string[] = [];
+    let current = '';
+    words.forEach((word) => {
+      const test = current ? `${current} ${word}` : word;
+      if (ctx.measureText(test).width > 880) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = test;
+      }
+    });
+    if (current) lines.push(current);
+
+    const lineHeight = 62;
+    const startY = cy + 22 - ((lines.length - 1) * lineHeight) / 2;
+    lines.forEach((line, i) => {
+      ctx.fillText(line, cx, startY + i * lineHeight);
+    });
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    return tex;
   }
 
   private buildMemorialPavilion(): void {
@@ -2068,6 +2438,86 @@ export class SanctuaryScene {
     }
   }
 
+  private buildWhiteButterflies(): void {
+    const wingMat = new THREE.MeshStandardMaterial({
+      color: '#ffffff',
+      emissive: '#f5fbff',
+      emissiveIntensity: 0.25,
+      roughness: 0.35,
+      side: THREE.DoubleSide,
+    });
+    const bodyMat = new THREE.MeshStandardMaterial({ color: '#5b524a', roughness: 0.8 });
+
+    const upperWingGeo = new THREE.CircleGeometry(0.065, 10);
+    upperWingGeo.scale(1.15, 0.85, 1);
+    const lowerWingGeo = new THREE.CircleGeometry(0.045, 10);
+    lowerWingGeo.scale(0.95, 1.1, 1);
+
+    // 8 inside the sanctuary (near altars, walkway & lagoon) + 8 outside (near entrance & meadow)
+    const centers: THREE.Vector3[] = [
+      // Inside
+      new THREE.Vector3(-3.2, 1.55, -3.8),
+      new THREE.Vector3(3.1, 1.7, -5.8),
+      new THREE.Vector3(-4.2, 1.45, -10.2),
+      new THREE.Vector3(3.8, 1.65, -12.8),
+      new THREE.Vector3(0.4, 1.35, -16.5),
+      new THREE.Vector3(-3.4, 1.6, -21.2),
+      new THREE.Vector3(3.6, 1.5, -24.5),
+      new THREE.Vector3(0.0, 1.55, -29.2),
+      // Outside
+      new THREE.Vector3(-2.1, 1.65, 3.8),
+      new THREE.Vector3(2.2, 1.8, 4.2),
+      new THREE.Vector3(-4.5, 1.45, 5.5),
+      new THREE.Vector3(4.6, 1.55, 5.8),
+      new THREE.Vector3(-10.5, 1.5, -8.0),
+      new THREE.Vector3(10.8, 1.6, -12.0),
+      new THREE.Vector3(-11.2, 1.4, -22.0),
+      new THREE.Vector3(11.4, 1.5, -26.0),
+    ];
+
+    centers.forEach((center, idx) => {
+      const g = new THREE.Group();
+
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.09, 6), bodyMat);
+      body.rotation.x = Math.PI / 2;
+      g.add(body);
+
+      const makeWingSide = (dir: 1 | -1) => {
+        const wingPivot = new THREE.Group();
+        const upper = new THREE.Mesh(upperWingGeo, wingMat);
+        upper.rotation.x = -Math.PI / 2;
+        upper.position.set(dir * 0.055, 0, -0.02);
+        wingPivot.add(upper);
+
+        const lower = new THREE.Mesh(lowerWingGeo, wingMat);
+        lower.rotation.x = -Math.PI / 2;
+        lower.position.set(dir * 0.042, 0, 0.032);
+        wingPivot.add(lower);
+
+        return wingPivot;
+      };
+
+      const leftWing = makeWingSide(-1);
+      const rightWing = makeWingSide(1);
+      g.add(leftWing);
+      g.add(rightWing);
+
+      g.position.copy(center);
+      this.scene.add(g);
+
+      this.whiteButterflies.push({
+        group: g,
+        leftWing,
+        rightWing,
+        center,
+        radiusX: 0.95 + (idx % 3) * 0.45,
+        radiusZ: 0.85 + ((idx + 1) % 3) * 0.45,
+        speed: 0.65 + (idx % 4) * 0.14,
+        phase: idx * 0.9,
+      });
+    });
+  }
+
   private buildWalkRipple(): void {
     const geo = new THREE.RingGeometry(0.28, 0.36, 32);
     geo.rotateX(-Math.PI / 2);
@@ -2417,64 +2867,32 @@ export class SanctuaryScene {
     });
 
     const shelfSlots: [number, number, number][] = [
-      [-0.66, 1.67, 0.06],
-      [-0.56, 1.67, 0.06],
-      [0.56, 1.67, 0.06],
-      [0.66, 1.67, 0.06],
-      [-0.66, 1.34, 0.06],
-      [-0.56, 1.34, 0.06],
-      [0.56, 1.34, 0.06],
-      [0.66, 1.34, 0.06],
+      [-0.72, 1.72, 0.06],
+      [-0.62, 1.72, 0.06],
+      [-0.52, 1.72, 0.06],
+      [0.52, 1.72, 0.06],
+      [0.62, 1.72, 0.06],
+      [0.72, 1.72, 0.06],
+      [-0.72, 1.39, 0.06],
+      [-0.62, 1.39, 0.06],
+      [-0.52, 1.39, 0.06],
+      [0.52, 1.39, 0.06],
+      [0.62, 1.39, 0.06],
+      [0.72, 1.39, 0.06],
     ];
 
-    const gestures = (memorial.sentGestures || []).slice(-8);
+    const gestures = (memorial.sentGestures || []).slice(-12);
     gestures.forEach((g, idx) => {
       const [gx, gy, gz] = shelfSlots[idx];
-      const figurine = this.createMiniatureGiftMesh(g.label);
-      figurine.position.set(gx, gy, gz);
-      group.add(figurine);
+      const sprite = this.createEmojiOfferingSprite(g.emoji || '🤍');
+      sprite.position.set(gx, gy, gz);
+      group.add(sprite);
     });
 
     // Family's chosen plant/tree beside the memorial (never withers)
     const plant = this.buildChosenPlant(memorial.chosenPlant);
     plant.position.set(-1.12, 0, 0.05);
     group.add(plant);
-
-    // Little table with illustrated Book ("Nuestro libro") beside the altar
-    const benchTop = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.06, 0.45), woodMat);
-    benchTop.position.set(1.08, 0.52, 0.12);
-    benchTop.castShadow = true;
-    group.add(benchTop);
-
-    [-0.3, 0.3].forEach((lx) => {
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.52, 0.36), woodMat);
-      leg.position.set(1.08 + lx, 0.26, 0.12);
-      group.add(leg);
-    });
-
-    const bookCover = new THREE.Mesh(
-      new THREE.BoxGeometry(0.36, 0.04, 0.28),
-      new THREE.MeshStandardMaterial({ color: '#06ada2', roughness: 0.6 })
-    );
-    bookCover.position.set(1.08, 0.57, 0.12);
-    bookCover.rotation.y = -0.18;
-    group.add(bookCover);
-
-    const bookPages = new THREE.Mesh(
-      new THREE.BoxGeometry(0.32, 0.025, 0.24),
-      new THREE.MeshStandardMaterial({ color: '#faf7f2', roughness: 0.85 })
-    );
-    bookPages.position.set(1.08, 0.595, 0.12);
-    bookPages.rotation.y = -0.18;
-    group.add(bookPages);
-
-    const bookHitMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, 0.65, 0.55),
-      new THREE.MeshBasicMaterial({ visible: false })
-    );
-    bookHitMesh.position.set(1.08, 0.65, 0.12);
-    bookHitMesh.userData = { bookMemorialId: memorial.id };
-    group.add(bookHitMesh);
 
     const hitMesh = new THREE.Mesh(
       new THREE.BoxGeometry(1.4, 2.2, 1.0),
@@ -2488,7 +2906,6 @@ export class SanctuaryScene {
       memorial,
       group,
       hitMesh,
-      bookHitMesh,
       flameMesh,
       flameLight,
       leftDoorPivot,
@@ -2497,120 +2914,32 @@ export class SanctuaryScene {
     };
   }
 
-  private createMiniatureGiftMesh(label: string): THREE.Group {
-    const g = new THREE.Group();
-    const lbl = label.toLowerCase();
+  private createEmojiOfferingSprite(emoji: string): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
 
-    if (lbl.includes('peluche')) {
-      // Miniature teddy bear (osito de peluche)
-      const furMat = new THREE.MeshStandardMaterial({ color: '#b57c4a', roughness: 0.8 });
-      const bellyMat = new THREE.MeshStandardMaterial({ color: '#dfbc94', roughness: 0.85 });
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 10), furMat);
-      body.scale.set(1, 1.15, 0.9);
-      body.position.y = 0.032;
-      g.add(body);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 10), furMat);
-      head.position.y = 0.072;
-      g.add(head);
-      [-0.018, 0.018].forEach((ex) => {
-        const ear = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 8), furMat);
-        ear.position.set(ex, 0.092, 0);
-        g.add(ear);
-      });
-      const snout = new THREE.Mesh(new THREE.SphereGeometry(0.01, 8, 8), bellyMat);
-      snout.position.set(0, 0.068, 0.02);
-      g.add(snout);
-    } else if (lbl.includes('corazón')) {
-      // Sculpted 3D heart
-      const heartColor = lbl.includes('blanco') ? '#ffffff' : '#d64545';
-      const heartMat = new THREE.MeshStandardMaterial({ color: heartColor, roughness: 0.35 });
-      const shape = new THREE.Shape();
-      shape.moveTo(0, 0.02);
-      shape.bezierCurveTo(0, 0.035, -0.022, 0.035, -0.022, 0.016);
-      shape.bezierCurveTo(-0.022, 0.002, 0, -0.012, 0, -0.022);
-      shape.bezierCurveTo(0, -0.012, 0.022, 0.002, 0.022, 0.016);
-      shape.bezierCurveTo(0.022, 0.035, 0, 0.035, 0, 0.02);
-      const heartGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.012, bevelEnabled: true, bevelSize: 0.004, bevelThickness: 0.004 });
-      const heart = new THREE.Mesh(heartGeo, heartMat);
-      heart.scale.setScalar(1.3);
-      heart.position.set(0, 0.038, -0.008);
-      g.add(heart);
-    } else if (lbl.includes('snack') || lbl.includes('hues')) {
-      // Dog bone (huesito)
-      const boneMat = new THREE.MeshStandardMaterial({ color: '#f6efe0', roughness: 0.7 });
-      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.055, 8), boneMat);
-      shaft.rotation.z = Math.PI / 2;
-      shaft.position.y = 0.016;
-      g.add(shaft);
-      [-0.028, 0.028].forEach((bx) => {
-        [-0.009, 0.009].forEach((bz) => {
-          const knob = new THREE.Mesh(new THREE.SphereGeometry(0.011, 8, 8), boneMat);
-          knob.position.set(bx, 0.016, bz);
-          g.add(knob);
-        });
-      });
-    } else if (lbl.includes('ovillo')) {
-      // Yarn ball (ovillo de lana)
-      const yarnMat = new THREE.MeshStandardMaterial({ color: '#64caca', roughness: 0.85 });
-      const ball = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 12), yarnMat);
-      ball.position.y = 0.03;
-      g.add(ball);
-    } else if (lbl.includes('zanahoria')) {
-      const carrot = new THREE.Mesh(
-        new THREE.ConeGeometry(0.016, 0.065, 8),
-        new THREE.MeshStandardMaterial({ color: '#e87d2f', roughness: 0.7 })
-      );
-      carrot.rotation.z = Math.PI / 2.2;
-      carrot.position.y = 0.02;
-      g.add(carrot);
-    } else if (lbl.includes('leche') || lbl.includes('platico')) {
-      const bowl = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.036, 0.024, 0.018, 12),
-        new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.4 })
-      );
-      bowl.position.y = 0.01;
-      g.add(bowl);
-    } else if (lbl.includes('pastel')) {
-      const cake = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.032, 0.034, 0.034, 12),
-        new THREE.MeshStandardMaterial({ color: '#f7d5dc', roughness: 0.6 })
-      );
-      cake.position.y = 0.018;
-      g.add(cake);
-      const candle = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.004, 0.004, 0.025, 6),
-        new THREE.MeshBasicMaterial({ color: '#ffcf6e' })
-      );
-      candle.position.y = 0.045;
-      g.add(candle);
-    } else if (lbl.includes('árbol')) {
-      const tree = new THREE.Mesh(
-        new THREE.ConeGeometry(0.032, 0.075, 8),
-        new THREE.MeshStandardMaterial({ color: '#3f7a44', roughness: 0.8 })
-      );
-      tree.position.y = 0.038;
-      g.add(tree);
-    } else if (lbl.includes('regalo')) {
-      const box = new THREE.Mesh(
-        new THREE.BoxGeometry(0.048, 0.045, 0.048),
-        new THREE.MeshStandardMaterial({ color: '#d96b6b', roughness: 0.5 })
-      );
-      box.position.y = 0.024;
-      g.add(box);
-    } else {
-      // Flowers / butterflies / stars
-      const col = lbl.includes('girasol') || lbl.includes('estrella')
-        ? '#f0c44d'
-        : lbl.includes('rosa') || lbl.includes('tulip')
-          ? '#e88b9c'
-          : '#8ae0db';
-      const flower = this.createWhiteLily(col);
-      flower.scale.setScalar(0.55);
-      flower.position.y = 0.012;
-      g.add(flower);
-    }
+    // Soft glowing circular medallion behind the emoji
+    ctx.beginPath();
+    ctx.arc(64, 64, 54, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fill();
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = '#64caca';
+    ctx.stroke();
 
-    return g;
+    ctx.font = '62px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(emoji, 64, 68);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
+    const sprite = new THREE.Sprite(mat);
+    sprite.scale.set(0.11, 0.11, 1);
+    return sprite;
   }
 
   private createPortraitTexture(memorial: Memorial): THREE.CanvasTexture {
@@ -2749,7 +3078,9 @@ export class SanctuaryScene {
   private handleResize = (): void => {
     const w = this.container.clientWidth || window.innerWidth;
     const h = this.container.clientHeight || window.innerHeight;
-    this.camera.aspect = w / h;
+    const aspect = w / Math.max(1, h);
+    this.camera.fov = aspect < 0.85 ? 64 : aspect < 1.15 ? 58 : 52;
+    this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
   };
@@ -2789,7 +3120,7 @@ export class SanctuaryScene {
       const targets = [
         this.podcastHitMesh,
         ...this.memorialObjects.map((m) => m.hitMesh),
-        this.rainbowHitMesh,
+        ...(this.rainbowHitMesh.visible ? [this.rainbowHitMesh, this.rainbowSignMesh] : []),
       ];
       const hits = this.raycaster.intersectObjects(targets);
       if (hits.length > 0) {
@@ -2799,11 +3130,7 @@ export class SanctuaryScene {
             this.isRainbowHovered = true;
             this.callbacks.onHoverRainbow(true);
           }
-          if (this.isRainbowHovered) {
-          this.isRainbowHovered = false;
-          this.callbacks.onHoverRainbow(false);
-        }
-        if (this.isPodcastHovered) {
+          if (this.isPodcastHovered) {
             this.isPodcastHovered = false;
             this.callbacks.onHoverPodcast(false);
           }
@@ -2811,7 +3138,7 @@ export class SanctuaryScene {
             this.hoveredMemorialId = null;
             this.callbacks.onHoverMemorial(null);
           }
-          this.renderer.domElement.style.cursor = 'pointer';
+          this.renderer.domElement.style.cursor = 'inherit';
           return;
         }
         if (this.isRainbowHovered) {
@@ -2827,12 +3154,8 @@ export class SanctuaryScene {
             this.hoveredMemorialId = null;
             this.callbacks.onHoverMemorial(null);
           }
-          this.renderer.domElement.style.cursor = 'pointer';
+          this.renderer.domElement.style.cursor = 'inherit';
           return;
-        }
-        if (this.isRainbowHovered) {
-          this.isRainbowHovered = false;
-          this.callbacks.onHoverRainbow(false);
         }
         if (this.isPodcastHovered) {
           this.isPodcastHovered = false;
@@ -2845,7 +3168,7 @@ export class SanctuaryScene {
           this.hoveredMemorialId = id;
           this.callbacks.onHoverMemorial(found);
         }
-        this.renderer.domElement.style.cursor = 'pointer';
+        this.renderer.domElement.style.cursor = 'inherit';
       } else {
         if (this.isRainbowHovered) {
           this.isRainbowHovered = false;
@@ -2860,7 +3183,7 @@ export class SanctuaryScene {
           this.hoveredMemorialId = null;
           this.callbacks.onHoverMemorial(null);
         }
-        this.renderer.domElement.style.cursor = 'grab';
+        this.renderer.domElement.style.cursor = 'inherit';
       }
     }
   };
@@ -2897,15 +3220,21 @@ export class SanctuaryScene {
       }
     }
 
-    // 2. Check rainbow ("La leyenda del puente del arcoíris")
-    const rainbowHits = this.raycaster.intersectObject(this.rainbowHitMesh);
-    if (rainbowHits.length > 0 && this.rainbowHitMesh.visible) {
+    // 2. Check ground/floor vs rainbow (ground in front always wins over distant rainbow)
+    const groundHits = this.raycaster.intersectObjects([this.terrainMesh, this.pavilionFloorMesh]);
+    const rainbowHits = this.rainbowHitMesh.visible
+      ? this.raycaster.intersectObjects([this.rainbowHitMesh, this.rainbowSignMesh])
+      : [];
+
+    if (
+      rainbowHits.length > 0 &&
+      (groundHits.length === 0 || rainbowHits[0].distance < groundHits[0].distance)
+    ) {
       this.callbacks.onSelectRainbow();
       return;
     }
 
     // 3. Walk to clicked ground or pavilion floor
-    const groundHits = this.raycaster.intersectObjects([this.terrainMesh, this.pavilionFloorMesh]);
     if (groundHits.length > 0) {
       const pt = groundHits[0].point;
       const clampedX = THREE.MathUtils.clamp(pt.x, -26, 26);
@@ -2949,7 +3278,7 @@ export class SanctuaryScene {
       this.leftGatePivot.rotation.y = -ease * Math.PI * 0.48;
       this.rightGatePivot.rotation.y = ease * Math.PI * 0.48;
 
-      this.camPos.set(0, 1.85 - ease * 0.1, THREE.MathUtils.lerp(9.2, -3.5, ease));
+      this.camPos.set(0, 1.85 - ease * 0.1, THREE.MathUtils.lerp(9.2, 0.6, ease));
       this.targetCamPos.copy(this.camPos);
 
       if (this.enterProgress >= 1) {
@@ -2982,7 +3311,7 @@ export class SanctuaryScene {
 
       if (moved) {
         this.targetCamPos.x = THREE.MathUtils.clamp(this.targetCamPos.x, -26, 26);
-        this.targetCamPos.z = THREE.MathUtils.clamp(this.targetCamPos.z, -38, 1.0);
+        this.targetCamPos.z = THREE.MathUtils.clamp(this.targetCamPos.z, -38, 1.8);
         this.targetCamPos.y = this.getTerrainHeight(this.targetCamPos.x, this.targetCamPos.z) + 1.75;
       }
 
@@ -3047,6 +3376,22 @@ export class SanctuaryScene {
         const flap = Math.sin(elapsed * 6.5 + bird.angle * 3) * 0.42;
         bird.leftWing.rotation.z = flap;
         bird.rightWing.rotation.z = -flap;
+      }
+
+      // White butterflies fluttering gently inside and outside the sanctuary
+      for (const bf of this.whiteButterflies) {
+        bf.phase += bf.speed * dt;
+        const t = bf.phase;
+        const bx = bf.center.x + Math.sin(t) * bf.radiusX;
+        const bz = bf.center.z + Math.sin(t * 1.4) * bf.radiusZ;
+        const by = bf.center.y + Math.sin(t * 2.1) * 0.24;
+        const dx = Math.cos(t) * bf.radiusX;
+        const dz = Math.cos(t * 1.4) * bf.radiusZ * 1.4;
+        bf.group.position.set(bx, by, bz);
+        bf.group.rotation.y = Math.atan2(dx, dz);
+        const flap = Math.sin(elapsed * 9.5 + bf.phase * 2) * 0.78;
+        bf.leftWing.rotation.z = -flap;
+        bf.rightWing.rotation.z = flap;
       }
 
       // Fountain sprouting water droplets — slow and gentle

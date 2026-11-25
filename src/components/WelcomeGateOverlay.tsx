@@ -118,7 +118,7 @@ export const WelcomeGateOverlay: React.FC<WelcomeGateOverlayProps> = ({
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+          <div className="responsive-grid-2">
             <div>
               <label
                 htmlFor="gate-email"

@@ -22,7 +22,7 @@ const STORAGE_PROFILE = 'dueloanimal_profile_v2';
 const STORAGE_MEMORIALS = 'dueloanimal_memorials_v2';
 const STORAGE_BOOKS = 'dueloanimal_books_v2';
 const STORAGE_INVITES = 'dueloanimal_invites_v2';
-const STORAGE_GUIDE_SEEN = 'dueloanimal_guide_seen_v2';
+const STORAGE_GUIDE_SEEN_EMAILS = 'dueloanimal_guide_seen_emails_v1';
 
 function getOrCreateOwnerId(): string {
   try {
@@ -96,7 +96,7 @@ export const App: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'Guardando...' | 'Guardado' | 'No se pudo guardar'>('Guardado');
 
   const canAccessMemorial = (m: Memorial): boolean => {
-    if (m.ownerId === ownerId) return true;
+    if (m.ownerId === ownerId || m.ownerId === deviceOwnerId) return true;
     if (m.privacy === 'publico') return true;
     if (m.privacy === 'invitados' && m.inviteCode && unlockedInvites.includes(m.inviteCode.toUpperCase())) {
       return true;
@@ -266,16 +266,6 @@ export const App: React.FC = () => {
       },
       onEnterComplete: () => {
         setGateAnimationDone(true);
-        try {
-          const p = userProfileRef.current;
-          const isRegistered = Boolean(p.email.trim() || p.grievingName.trim());
-          if (isRegistered && !localStorage.getItem(STORAGE_GUIDE_SEEN)) {
-            localStorage.setItem(STORAGE_GUIDE_SEEN, '1');
-            setActiveModal('guide');
-          }
-        } catch {
-          // ignore
-        }
       },
     });
     sceneRef.current = scene;
@@ -286,6 +276,20 @@ export const App: React.FC = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const maybeOpenGuideForFirstEmail = (emailRaw: string) => {
+    const email = emailRaw.trim().toLowerCase();
+    if (!email) return;
+    try {
+      const seenEmails = loadStored<string[]>(STORAGE_GUIDE_SEEN_EMAILS, []);
+      if (!seenEmails.includes(email)) {
+        localStorage.setItem(STORAGE_GUIDE_SEEN_EMAILS, JSON.stringify([...seenEmails, email]));
+        setActiveModal('guide');
+      }
+    } catch {
+      setActiveModal('guide');
+    }
+  };
 
   const handleEnter = (profile: UserProfile) => {
     userProfileRef.current = profile;
@@ -299,6 +303,7 @@ export const App: React.FC = () => {
       soundRef.current?.start();
       setAudioEnabled(true);
     }
+    maybeOpenGuideForFirstEmail(profile.email);
   };
 
   const handleToggleAudio = () => {
@@ -455,7 +460,9 @@ export const App: React.FC = () => {
 
       {selectedMemorial && (() => {
         const isMemorialOwner =
-          selectedMemorial.ownerId === ownerId || selectedMemorial.ownerId === 'demo-owner';
+          selectedMemorial.ownerId === ownerId ||
+          selectedMemorial.ownerId === deviceOwnerId ||
+          selectedMemorial.ownerId === 'demo-owner';
         const linkedBook = books.find((b) => b.memorialId === selectedMemorial.id);
         const allowBook = isMemorialOwner;
         const bookCtaLabel = linkedBook
@@ -546,15 +553,7 @@ export const App: React.FC = () => {
           profile={userProfile}
           onSaveProfile={(p) => {
             setUserProfile(p);
-            try {
-              const isRegistered = Boolean(p.email.trim() || p.grievingName.trim());
-              if (isRegistered && !localStorage.getItem(STORAGE_GUIDE_SEEN)) {
-                localStorage.setItem(STORAGE_GUIDE_SEEN, '1');
-                setActiveModal('guide');
-              }
-            } catch {
-              // ignore
-            }
+            maybeOpenGuideForFirstEmail(p.email);
           }}
           onClose={() => setActiveModal('none')}
         />

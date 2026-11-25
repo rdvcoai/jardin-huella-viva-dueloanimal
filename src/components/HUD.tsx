@@ -12,6 +12,7 @@ import {
   Info,
   List,
   Mail,
+  Menu,
   Moon,
   Plus,
   Sun,
@@ -19,6 +20,7 @@ import {
   Volume2,
   VolumeX,
   Wind,
+  X,
 } from 'lucide-react';
 import { MESSAGES, SupportedLang } from '../i18n/translations';
 import { TimeMode } from '../three/SanctuaryScene';
@@ -89,6 +91,7 @@ export const HUD: React.FC<HUDProps> = ({
 }) => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const t = MESSAGES[lang];
 
   const matchingMemorials = searchQuery.trim()
@@ -152,14 +155,35 @@ export const HUD: React.FC<HUDProps> = ({
               color: 'var(--text-espresso)',
             }}
           >
-            <span className="font-serif-editorial" style={{ fontSize: '1.05rem', fontWeight: 600 }}>
+            <span className="font-serif-editorial" style={{ fontSize: 'clamp(0.86rem, 2.6vw, 1.05rem)', fontWeight: 600 }}>
               Jardín Huella Viva · Siembra su recuerdo
             </span>
           </button>
 
+          <button
+            type="button"
+            className="btn-secondary hud-mobile-only"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            aria-expanded={mobileMenuOpen}
+            aria-label="Abrir menú del jardín"
+          >
+            {mobileMenuOpen ? <X size={15} /> : <Menu size={15} />}
+            Menú
+          </button>
+
+          <div
+            className={`hud-collapsible ${mobileMenuOpen ? 'is-open' : ''}`}
+            style={{
+              display: undefined,
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: '0.45rem',
+            }}
+          >
+
           {/* Real participation count */}
           <div
-            className="glass-pill"
+            className="glass-pill hud-hide-mobile"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -341,6 +365,7 @@ export const HUD: React.FC<HUDProps> = ({
               </div>
             )}
           </div>
+          </div>
         </nav>
 
         {/* Right actions */}
@@ -513,8 +538,9 @@ export const HUD: React.FC<HUDProps> = ({
             aria-label="Controles de navegación"
             style={{
               position: 'fixed',
-              bottom: '1.15rem',
-              left: '1.15rem',
+              bottom: '3.25rem',
+              left: '50%',
+              transform: 'translateX(-50%)',
               zIndex: 18,
               display: 'grid',
               gridTemplateColumns: 'repeat(3, 42px)',
@@ -622,7 +648,7 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
 
           <div
-            className="glass-pill"
+            className="glass-pill hud-hide-mobile"
             style={{
               position: 'fixed',
               bottom: '0.9rem',
