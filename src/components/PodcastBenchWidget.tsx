@@ -45,17 +45,7 @@ export const PodcastBenchWidget: React.FC<PodcastBenchWidgetProps> = ({
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        bottom: '3.6rem',
-        left: '1rem',
-        zIndex: 22,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        gap: '0.5rem',
-        maxWidth: 'calc(100vw - 2rem)',
-      }}
+      className="podcast-dock"
       onMouseEnter={() => setHoveredOrFocused(true)}
       onMouseLeave={() => setHoveredOrFocused(false)}
     >
@@ -82,7 +72,6 @@ export const PodcastBenchWidget: React.FC<PodcastBenchWidgetProps> = ({
               <button
                 type="button"
                 className="btn-icon"
-                style={{ width: '26px', height: '26px' }}
                 aria-label="Cerrar información del podcast"
                 onClick={() => setInfoExpanded(false)}
               >

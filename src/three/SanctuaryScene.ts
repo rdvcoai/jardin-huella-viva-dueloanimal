@@ -131,7 +131,7 @@ export class SanctuaryScene {
     const height = container.clientHeight || window.innerHeight;
     const aspect = width / Math.max(1, height);
     const isNarrowOrTouch = width < 1024 || 'ontouchstart' in window;
-    const initialFov = aspect < 0.85 ? 64 : aspect < 1.15 ? 58 : 52;
+    const initialFov = aspect < 0.85 ? 70 : aspect < 1.15 ? 60 : 52;
 
     this.camera = new THREE.PerspectiveCamera(initialFov, aspect, 0.1, 340);
     this.camera.position.copy(this.camPos);
@@ -3079,7 +3079,7 @@ export class SanctuaryScene {
     const w = this.container.clientWidth || window.innerWidth;
     const h = this.container.clientHeight || window.innerHeight;
     const aspect = w / Math.max(1, h);
-    this.camera.fov = aspect < 0.85 ? 64 : aspect < 1.15 ? 58 : 52;
+    this.camera.fov = aspect < 0.85 ? 70 : aspect < 1.15 ? 60 : 52;
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);

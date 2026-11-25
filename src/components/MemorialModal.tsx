@@ -121,6 +121,8 @@ export const MemorialModal: React.FC<MemorialModalProps> = ({
               <img
                 src={memorial.photoUrl}
                 alt={memorial.name}
+                loading="lazy"
+                decoding="async"
                 style={{
                   width: '82px',
                   height: '94px',

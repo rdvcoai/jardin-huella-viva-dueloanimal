@@ -18,9 +18,10 @@ import {
   deleteCloudBook,
   deleteCloudMemorial,
   fetchCloudBooks,
-  fetchCloudMemorials,
+  fetchCloudMemorialsPage,
   isSupabaseConfigured,
-  subscribeToCloudMemorials,
+  redeemCloudInviteCode,
+  supabase,
   upsertCloudBook,
   upsertCloudMemorial,
 } from './lib/supabase';
@@ -32,6 +33,7 @@ const STORAGE_PROFILE = 'dueloanimal_profile_v2';
 const STORAGE_MEMORIALS = 'dueloanimal_memorials_v2';
 const STORAGE_BOOKS = 'dueloanimal_books_v2';
 const STORAGE_INVITES = 'dueloanimal_invites_v2';
+const STORAGE_DELETED_IDS = 'dueloanimal_deleted_ids_v1';
 const STORAGE_GUIDE_SEEN_EMAILS = 'dueloanimal_guide_seen_emails_v1';
 
 function getOrCreateOwnerId(): string {
@@ -71,7 +73,8 @@ export const App: React.FC = () => {
   const [lang, setLang] = useState<SupportedLang>(() =>
     detectLanguage(loadStored<UserProfile>(STORAGE_PROFILE, { email: '', grievingName: '', country: '' }).country)
   );
-  const ownerId = userProfile.email ? `email:${userProfile.email}` : deviceOwnerId;
+  const [authUid, setAuthUid] = useState<string | null>(null);
+  const ownerId = authUid ? `uid:${authUid}` : deviceOwnerId;
   const [memorials, setMemorials] = useState<Memorial[]>(() => {
     const stored = loadStored(STORAGE_MEMORIALS, DEMO_MEMORIALS).filter(
       (m) => !(m.ownerId === 'demo-owner' && !m.photoUrl)
@@ -86,6 +89,10 @@ export const App: React.FC = () => {
   const [unlockedInvites, setUnlockedInvites] = useState<string[]>(() =>
     loadStored(STORAGE_INVITES, [])
   );
+  const [deletedIds, setDeletedIds] = useState<string[]>(() =>
+    loadStored(STORAGE_DELETED_IDS, [])
+  );
+  const [cloudTotalMemorials, setCloudTotalMemorials] = useState<number | null>(null);
 
   const [hasEntered, setHasEntered] = useState(false);
   const [gateAnimationDone, setGateAnimationDone] = useState(false);
@@ -138,7 +145,10 @@ export const App: React.FC = () => {
     [memorials, ownerId, unlockedInvites]
   );
 
-  const totalSanctuaries = Math.max(1, Math.ceil(visibleMemorials.length / ALTARS_PER_SANCTUARY));
+  const totalSanctuaries = Math.max(
+    1,
+    Math.ceil(Math.max(visibleMemorials.length, cloudTotalMemorials ?? 0) / ALTARS_PER_SANCTUARY)
+  );
   const sanctuaryMemorials = useMemo(
     () =>
       visibleMemorials.slice(
@@ -189,27 +199,49 @@ export const App: React.FC = () => {
     }
   }, [unlockedInvites]);
 
-  // Cloud sync (Supabase) on initial load when configured
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_DELETED_IDS, JSON.stringify(deletedIds));
+    } catch {
+      // ignore
+    }
+  }, [deletedIds]);
+
+  // Listen to Supabase Auth state changes
+  useEffect(() => {
+    if (!supabase) return;
+    void supabase.auth.getUser().then(({ data }) => setAuthUid(data.user?.id ?? null));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUid(session?.user?.id ?? null);
+    });
+    return () => {
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  // Paginated cloud sync (Supabase as source of truth, 30 memorials per sanctuary)
   useEffect(() => {
     if (!isSupabaseConfigured) return;
     let cancelled = false;
 
     void (async () => {
-      const [cloudMemorials, cloudBooks] = await Promise.all([
-        fetchCloudMemorials(),
+      const [pageResult, cloudBooks] = await Promise.all([
+        fetchCloudMemorialsPage(currentSanctuary, ALTARS_PER_SANCTUARY),
         fetchCloudBooks(),
       ]);
       if (cancelled) return;
 
-      if (cloudMemorials) {
+      if (pageResult) {
+        setCloudTotalMemorials(pageResult.totalCount);
+        const deletedSet = new Set(deletedIds);
         setMemorials((localList) => {
           const map = new Map<string, Memorial>();
-          cloudMemorials.forEach((m) => map.set(m.id, m));
+          // Keep non-demo local items only if not deleted; cloud is source of truth for synced items
           localList.forEach((m) => {
-            if (!map.has(m.id)) {
-              map.set(m.id, m);
-              void upsertCloudMemorial(m);
-            }
+            if (!deletedSet.has(m.id)) map.set(m.id, m);
+          });
+          pageResult.memorials.forEach((m) => {
+            if (!deletedSet.has(m.id)) map.set(m.id, m);
           });
           return Array.from(map.values());
         });
@@ -218,35 +250,17 @@ export const App: React.FC = () => {
       if (cloudBooks) {
         setBooks((localBooks) => {
           const map = new Map<string, MemoryBook>();
+          localBooks.forEach((b) => map.set(b.id, b));
           cloudBooks.forEach((b) => map.set(b.id, b));
-          localBooks.forEach((b) => {
-            if (!map.has(b.id)) {
-              map.set(b.id, b);
-              void upsertCloudBook(b);
-            }
-          });
           return Array.from(map.values());
         });
       }
     })();
 
-    const unsubscribe = subscribeToCloudMemorials(
-      (incoming) => {
-        setMemorials((prev) => {
-          const exists = prev.some((m) => m.id === incoming.id);
-          return exists ? prev.map((m) => (m.id === incoming.id ? incoming : m)) : [...prev, incoming];
-        });
-      },
-      (deletedId) => {
-        setMemorials((prev) => prev.filter((m) => m.id !== deletedId));
-      }
-    );
-
     return () => {
       cancelled = true;
-      unsubscribe();
     };
-  }, []);
+  }, [currentSanctuary, authUid, deletedIds]);
 
   const openOrCreateBookForMemorial = (memorial?: Memorial, chapterId?: string) => {
     if (memorial) {
@@ -259,7 +273,7 @@ export const App: React.FC = () => {
       }
       // Create private draft book linked to this memorial
       const newBook: MemoryBook = {
-        id: `book-${Date.now()}`,
+        id: `book-${crypto.randomUUID()}`,
         ownerId: memorial.ownerId === 'demo-owner' ? ownerId : memorial.ownerId,
         memorialId: memorial.id,
         title: 'Nuestra historia: un libro de la vida que compartimos',
@@ -288,7 +302,7 @@ export const App: React.FC = () => {
         return;
       }
       const newBook: MemoryBook = {
-        id: `book-${Date.now()}`,
+        id: `book-${crypto.randomUUID()}`,
         ownerId,
         title: 'Nuestra historia: un libro de la vida que compartimos',
         subtitle: 'Libro de recuerdos',
@@ -417,7 +431,7 @@ export const App: React.FC = () => {
 
     const newMemorial: Memorial = {
       ...data,
-      id: `mem-${Date.now()}`,
+      id: `mem-${crypto.randomUUID()}`,
       position: [x, 0, z],
       rotationY,
       objectMemories: [],
@@ -462,9 +476,17 @@ export const App: React.FC = () => {
           memorials={memorials}
           currentOwnerId={ownerId}
           unlockedInviteCodes={unlockedInvites}
-          onUnlockInviteCode={(code) =>
-            setUnlockedInvites((prev) => (prev.includes(code) ? prev : [...prev, code]))
-          }
+          onUnlockInviteCode={(code) => {
+            setUnlockedInvites((prev) => (prev.includes(code) ? prev : [...prev, code]));
+            void redeemCloudInviteCode(code).then((unlocked) => {
+              if (unlocked.length === 0) return;
+              setMemorials((prev) => {
+                const map = new Map(prev.map((m) => [m.id, m]));
+                unlocked.forEach((m) => map.set(m.id, m));
+                return Array.from(map.values());
+              });
+            });
+          }}
           onSelectMemorial={(m) => {
             setSelectedMemorialId(m.id);
           }}
@@ -551,9 +573,13 @@ export const App: React.FC = () => {
             onClose={() => setSelectedMemorialId(null)}
             onUpdateMemorial={(updated) => {
               setMemorials((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
-              void upsertCloudMemorial(updated);
+              setSaveStatus('Guardando...');
+              void upsertCloudMemorial(updated).then((res) => {
+                setSaveStatus(res.ok ? 'Guardado' : 'No se pudo guardar');
+              });
             }}
             onDeleteMemorial={(id) => {
+              setDeletedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
               setMemorials((prev) => prev.filter((m) => m.id !== id));
               void deleteCloudMemorial(id);
               setSelectedMemorialId(null);
@@ -583,7 +609,10 @@ export const App: React.FC = () => {
           }}
           onUpdateBook={(updated) => {
             setBooks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
-            void upsertCloudBook(updated);
+            setSaveStatus('Guardando...');
+            void upsertCloudBook(updated).then((res) => {
+              setSaveStatus(res.ok ? 'Guardado' : 'No se pudo guardar');
+            });
           }}
           onDeleteBook={(bookId) => {
             setBooks((prev) => prev.filter((b) => b.id !== bookId));
