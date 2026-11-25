@@ -14,6 +14,15 @@ import { WelcomeGateOverlay } from './components/WelcomeGateOverlay';
 import { PODCAST_CONFIG } from './config/podcastConfig';
 import { createSuggestedChapters, DEMO_MEMORIALS } from './data/initialData';
 import { detectLanguage, SupportedLang } from './i18n/translations';
+import {
+  deleteCloudBook,
+  deleteCloudMemorial,
+  fetchCloudBooks,
+  fetchCloudMemorials,
+  isSupabaseConfigured,
+  upsertCloudBook,
+  upsertCloudMemorial,
+} from './lib/supabase';
 import { SanctuaryScene, TimeMode } from './three/SanctuaryScene';
 import { Memorial, MemoryBook, UserProfile } from './types/memorial';
 
@@ -175,6 +184,52 @@ export const App: React.FC = () => {
       // ignore
     }
   }, [unlockedInvites]);
+
+  // Cloud sync (Supabase) on initial load when configured
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    let cancelled = false;
+
+    void (async () => {
+      const [cloudMemorials, cloudBooks] = await Promise.all([
+        fetchCloudMemorials(),
+        fetchCloudBooks(),
+      ]);
+      if (cancelled) return;
+
+      if (cloudMemorials) {
+        setMemorials((localList) => {
+          const map = new Map<string, Memorial>();
+          cloudMemorials.forEach((m) => map.set(m.id, m));
+          localList.forEach((m) => {
+            if (!map.has(m.id)) {
+              map.set(m.id, m);
+              void upsertCloudMemorial(m);
+            }
+          });
+          return Array.from(map.values());
+        });
+      }
+
+      if (cloudBooks) {
+        setBooks((localBooks) => {
+          const map = new Map<string, MemoryBook>();
+          cloudBooks.forEach((b) => map.set(b.id, b));
+          localBooks.forEach((b) => {
+            if (!map.has(b.id)) {
+              map.set(b.id, b);
+              void upsertCloudBook(b);
+            }
+          });
+          return Array.from(map.values());
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const openOrCreateBookForMemorial = (memorial?: Memorial, chapterId?: string) => {
     if (memorial) {
@@ -359,6 +414,7 @@ export const App: React.FC = () => {
     const nextSanctuary = Math.floor(visibleMemorials.length / ALTARS_PER_SANCTUARY);
     setCurrentSanctuary(nextSanctuary);
     setMemorials((prev) => [...prev, newMemorial]);
+    void upsertCloudMemorial(newMemorial);
     setActiveModal('none');
     setTimeout(() => {
       if (viewMode === '3d') {
@@ -476,11 +532,13 @@ export const App: React.FC = () => {
             canAccessBook={allowBook}
             bookCtaLabel={bookCtaLabel}
             onClose={() => setSelectedMemorialId(null)}
-            onUpdateMemorial={(updated) =>
-              setMemorials((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))
-            }
+            onUpdateMemorial={(updated) => {
+              setMemorials((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
+              void upsertCloudMemorial(updated);
+            }}
             onDeleteMemorial={(id) => {
               setMemorials((prev) => prev.filter((m) => m.id !== id));
+              void deleteCloudMemorial(id);
               setSelectedMemorialId(null);
             }}
             onOpenBook={(m) => {
@@ -506,11 +564,13 @@ export const App: React.FC = () => {
             setActiveBookId(null);
             setActiveBookChapterId(undefined);
           }}
-          onUpdateBook={(updated) =>
-            setBooks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)))
-          }
+          onUpdateBook={(updated) => {
+            setBooks((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+            void upsertCloudBook(updated);
+          }}
           onDeleteBook={(bookId) => {
             setBooks((prev) => prev.filter((b) => b.id !== bookId));
+            void deleteCloudBook(bookId);
             setActiveBookId(null);
           }}
           onViewInGarden={(m) => {

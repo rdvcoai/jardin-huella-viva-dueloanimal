@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BookHeart, Compass, Flame, MessageSquarePlus, Plus, Send, X } from 'lucide-react';
+import { submitCloudSuggestion } from '../lib/supabase';
 
 interface QuickGuideModalProps {
   onClose: () => void;
@@ -18,6 +19,8 @@ export const QuickGuideModal: React.FC<QuickGuideModalProps> = ({
   const handleSuggestionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!suggestion.trim()) return;
+    const id = `sug-${Date.now()}`;
+    const trimmed = suggestion.trim();
     try {
       const existing = JSON.parse(localStorage.getItem('dueloanimal_suggestions_v1') || '[]') as {
         id: string;
@@ -25,14 +28,15 @@ export const QuickGuideModal: React.FC<QuickGuideModalProps> = ({
         createdAt: string;
       }[];
       existing.unshift({
-        id: `sug-${Date.now()}`,
-        text: suggestion.trim(),
+        id,
+        text: trimmed,
         createdAt: new Date().toISOString(),
       });
       localStorage.setItem('dueloanimal_suggestions_v1', JSON.stringify(existing));
     } catch {
       // ignore storage errors
     }
+    void submitCloudSuggestion(id, trimmed);
     setSuggestion('');
     setSuggestionSent(true);
   };
