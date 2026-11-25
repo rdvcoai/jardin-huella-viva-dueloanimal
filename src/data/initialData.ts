@@ -183,9 +183,39 @@ export function createSuggestedChapters(): BookChapter[] {
 }
 
 /**
- * Lista inicial vacía para que el jardín muestre únicamente homenajes reales creados por las familias.
+ * Homenaje sembrado por defecto en la entrada del Jardín Huella Viva.
  */
-export const DEMO_MEMORIALS: Memorial[] = [];
+export const DEMO_MEMORIALS: Memorial[] = [
+  {
+    id: 'mem-mattus',
+    ownerId: 'demo-owner',
+    name: 'Mattus',
+    species: 'perro',
+    phrase: 'Siempre serás parte de nuestra familia y de cada paso que damos.',
+    country: 'Colombia',
+    photoUrl: '/mattus.jpg',
+    chosenPlant: 'lavanda',
+    privacy: 'publico',
+    accentTone: '#64caca',
+    position: [-3.95, 0.13, -3.6],
+    rotationY: Math.PI * 0.36,
+    createdAt: '2026-11-24',
+    candleCount: 3,
+    lightLeftByUser: true,
+    flowerLeftByUser: true,
+    objectMemories: [],
+    lifeMoments: [],
+    privateLetters: [],
+    valueReflections: [],
+    familyContributions: [],
+    sentGestures: [
+      { id: 'sg-mattus-1', label: 'Mariposa', emoji: '🦋' },
+      { id: 'sg-mattus-2', label: 'Alas de ángel', emoji: '🪽' },
+      { id: 'sg-mattus-3', label: 'Corazón rojo', emoji: '❤️' },
+      { id: 'sg-mattus-4', label: 'Vela', emoji: '🕯️' },
+    ],
+  },
+];
 
 export const SERVICE_OFFERINGS: ServiceOffering[] = [
   {
