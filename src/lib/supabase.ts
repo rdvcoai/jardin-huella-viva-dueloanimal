@@ -73,3 +73,33 @@ export async function submitCloudSuggestion(id: string, text: string): Promise<v
   if (!supabase) return;
   await supabase.from('suggestions').insert({ id, text });
 }
+
+export function subscribeToCloudMemorials(
+  onUpsert: (memorial: Memorial) => void,
+  onDelete: (id: string) => void
+): () => void {
+  if (!supabase) return () => {};
+
+  const channel = supabase
+    .channel('memorials-live')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'memorials' },
+      (payload) => {
+        if (payload.eventType === 'DELETE') {
+          const oldRow = payload.old as { id?: string } | null;
+          if (oldRow?.id) onDelete(oldRow.id);
+          return;
+        }
+        const newRow = payload.new as { data?: Memorial } | null;
+        if (newRow?.data) {
+          onUpsert(newRow.data);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    void supabase.removeChannel(channel);
+  };
+}

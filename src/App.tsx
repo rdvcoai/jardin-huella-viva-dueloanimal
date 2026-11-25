@@ -20,6 +20,7 @@ import {
   fetchCloudBooks,
   fetchCloudMemorials,
   isSupabaseConfigured,
+  subscribeToCloudMemorials,
   upsertCloudBook,
   upsertCloudMemorial,
 } from './lib/supabase';
@@ -226,8 +227,21 @@ export const App: React.FC = () => {
       }
     })();
 
+    const unsubscribe = subscribeToCloudMemorials(
+      (incoming) => {
+        setMemorials((prev) => {
+          const exists = prev.some((m) => m.id === incoming.id);
+          return exists ? prev.map((m) => (m.id === incoming.id ? incoming : m)) : [...prev, incoming];
+        });
+      },
+      (deletedId) => {
+        setMemorials((prev) => prev.filter((m) => m.id !== deletedId));
+      }
+    );
+
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 
@@ -614,6 +628,52 @@ export const App: React.FC = () => {
           onSaveProfile={(p) => {
             setUserProfile(p);
             maybeOpenGuideForFirstEmail(p.email);
+          }}
+          onExportBackup={() => {
+            const payload = JSON.stringify({ memorials, books }, null, 2);
+            const blob = new Blob([payload], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `jardin-huella-viva-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          onImportBackup={(jsonText) => {
+            try {
+              const parsed = JSON.parse(jsonText) as { memorials?: Memorial[]; books?: MemoryBook[] } | Memorial[];
+              const incomingMemorials = Array.isArray(parsed) ? parsed : parsed.memorials || [];
+              const incomingBooks = Array.isArray(parsed) ? [] : parsed.books || [];
+              if (incomingMemorials.length === 0 && incomingBooks.length === 0) return null;
+
+              setMemorials((prev) => {
+                const map = new Map(prev.map((m) => [m.id, m]));
+                incomingMemorials.forEach((m) => {
+                  if (m?.id && m?.name) {
+                    map.set(m.id, m);
+                    void upsertCloudMemorial(m);
+                  }
+                });
+                return Array.from(map.values());
+              });
+
+              if (incomingBooks.length > 0) {
+                setBooks((prev) => {
+                  const map = new Map(prev.map((b) => [b.id, b]));
+                  incomingBooks.forEach((b) => {
+                    if (b?.id) {
+                      map.set(b.id, b);
+                      void upsertCloudBook(b);
+                    }
+                  });
+                  return Array.from(map.values());
+                });
+              }
+
+              return { importedMemorials: incomingMemorials.length, importedBooks: incomingBooks.length };
+            } catch {
+              return null;
+            }
           }}
           onClose={() => setActiveModal('none')}
         />

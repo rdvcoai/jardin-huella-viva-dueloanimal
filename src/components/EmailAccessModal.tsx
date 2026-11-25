@@ -1,21 +1,46 @@
 import React, { useState } from 'react';
-import { Globe, Mail, User, X } from 'lucide-react';
+import { Cloud, Download, Globe, HardDrive, Mail, Upload, User, X } from 'lucide-react';
+import { isSupabaseConfigured } from '../lib/supabase';
 import { UserProfile } from '../types/memorial';
 
 interface EmailAccessModalProps {
   profile: UserProfile;
   onSaveProfile: (profile: UserProfile) => void;
+  onExportBackup: () => void;
+  onImportBackup: (jsonText: string) => { importedMemorials: number; importedBooks: number } | null;
   onClose: () => void;
 }
 
 export const EmailAccessModal: React.FC<EmailAccessModalProps> = ({
   profile,
   onSaveProfile,
+  onExportBackup,
+  onImportBackup,
   onClose,
 }) => {
   const [email, setEmail] = useState(profile.email);
   const [grievingName, setGrievingName] = useState(profile.grievingName);
   const [country, setCountry] = useState(profile.country);
+  const [backupNotice, setBackupNotice] = useState<string | null>(null);
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const res = onImportBackup(text);
+      if (res) {
+        setBackupNotice(
+          `Se restauraron ${res.importedMemorials} homenajes y ${res.importedBooks} libros.`
+        );
+      } else {
+        setBackupNotice('El archivo no tiene el formato de respaldo esperado.');
+      }
+    } catch {
+      setBackupNotice('No se pudo leer el archivo seleccionado.');
+    }
+    e.target.value = '';
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,6 +130,51 @@ export const EmailAccessModal: React.FC<EmailAccessModalProps> = ({
             </button>
           </div>
         </form>
+
+        <div
+          style={{
+            marginTop: '1.1rem',
+            paddingTop: '0.95rem',
+            borderTop: '1px solid var(--border-soft)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.6rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+            {isSupabaseConfigured ? (
+              <>
+                <Cloud size={14} color="#06ada2" />
+                <span>
+                  <strong style={{ color: '#06ada2' }}>Nube conectada:</strong> tus altares se sincronizan entre dispositivos.
+                </span>
+              </>
+            ) : (
+              <>
+                <HardDrive size={14} color="#707070" />
+                <span>
+                  <strong>Modo local:</strong> guardado en este navegador. Puedes exportar o restaurar un respaldo.
+                </span>
+              </>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem' }}>
+            <button type="button" className="btn-secondary" onClick={onExportBackup} style={{ fontSize: '0.77rem' }}>
+              <Download size={13} />
+              Exportar respaldo (.json)
+            </button>
+            <label className="btn-secondary" style={{ fontSize: '0.77rem', cursor: 'pointer' }}>
+              <Upload size={13} />
+              Restaurar respaldo
+              <input type="file" accept="application/json,.json" onChange={handleImportFile} style={{ display: 'none' }} />
+            </label>
+          </div>
+
+          {backupNotice && (
+            <div style={{ fontSize: '0.78rem', color: '#06ada2', fontWeight: 600 }}>{backupNotice}</div>
+          )}
+        </div>
       </div>
     </div>
   );
