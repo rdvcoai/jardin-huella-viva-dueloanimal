@@ -1,0 +1,28 @@
+name: Daily Supabase Backup & Quota Check
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # 06:00 UTC daily (01:00 COT)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run independent PostgreSQL & Storage backup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_DIR: backups/daily
+        run: node scripts/backup-supabase.mjs
+      - name: Upload backup artifact (90d retention, $0 cost)
+        uses: actions/upload-artifact@v4
+        with:
+          name: jhv-supabase-backup-${{ github.run_number }}
+          path: backups/daily
+          retention-days: 90

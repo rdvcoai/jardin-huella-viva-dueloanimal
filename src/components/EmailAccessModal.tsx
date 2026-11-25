@@ -1,6 +1,14 @@
-import React, { useState } from 'react';
-import { Cloud, Download, Globe, HardDrive, Mail, Upload, User, X } from 'lucide-react';
-import { isSupabaseConfigured } from '../lib/supabase';
+import React, { useEffect, useState } from 'react';
+import { Cloud, Download, Globe, HardDrive, KeyRound, LogOut, Mail, ShieldCheck, Upload, User, X } from 'lucide-react';
+import {
+  fetchUsageStats,
+  getAuthenticatedUser,
+  isSupabaseConfigured,
+  signInWithEmailOtp,
+  signOutCloud,
+  UsageStats,
+  verifyEmailOtp,
+} from '../lib/supabase';
 import { UserProfile } from '../types/memorial';
 
 interface EmailAccessModalProps {
@@ -22,6 +30,69 @@ export const EmailAccessModal: React.FC<EmailAccessModalProps> = ({
   const [grievingName, setGrievingName] = useState(profile.grievingName);
   const [country, setCountry] = useState(profile.country);
   const [backupNotice, setBackupNotice] = useState<string | null>(null);
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [authStatus, setAuthStatus] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageStats | null>(null);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    void (async () => {
+      const user = await getAuthenticatedUser();
+      setAuthEmail(user?.email ?? null);
+      if (user) {
+        const stats = await fetchUsageStats();
+        setUsage(stats);
+      }
+    })();
+  }, []);
+
+  const handleSendOtp = async () => {
+    const clean = email.trim().toLowerCase();
+    if (!clean) {
+      setAuthStatus('Escribe tu correo electrónico primero.');
+      return;
+    }
+    setAuthStatus('Enviando código de acceso...');
+    const res = await signInWithEmailOtp(clean);
+    if (res.ok) {
+      setOtpSent(true);
+      setAuthStatus('Código enviado a tu correo. Revisa tu bandeja de entrada o spam.');
+    } else {
+      setAuthStatus(res.error || 'No se pudo enviar el código.');
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const clean = email.trim().toLowerCase();
+    if (!clean || !otpCode.trim()) return;
+    setAuthStatus('Verificando código...');
+    const res = await verifyEmailOtp(clean, otpCode.trim());
+    if (res.ok) {
+      const user = await getAuthenticatedUser();
+      setAuthEmail(user?.email ?? clean);
+      setOtpSent(false);
+      setOtpCode('');
+      setAuthStatus('Sesión verificada en la nube.');
+      onSaveProfile({
+        email: clean,
+        grievingName: grievingName.trim(),
+        country: country.trim(),
+      });
+      const stats = await fetchUsageStats();
+      setUsage(stats);
+    } else {
+      setAuthStatus(res.error || 'Código inválido o expirado.');
+    }
+  };
+
+  const handleCloudSignOut = async () => {
+    await signOutCloud();
+    setAuthEmail(null);
+    setUsage(null);
+    setAuthStatus('Sesión cerrada.');
+  };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -58,8 +129,8 @@ export const EmailAccessModal: React.FC<EmailAccessModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="email-access-title"
-        className="glass-panel modal-card animate-gentle-in"
-        style={{ maxWidth: '480px' }}
+        className="glass-panel modal-card custom-scroll animate-gentle-in"
+        style={{ maxWidth: '490px' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
@@ -72,7 +143,7 @@ export const EmailAccessModal: React.FC<EmailAccessModalProps> = ({
         </div>
 
         <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.55 }}>
-          No necesitas contraseña. Tu correo identifica tus rincones y libros privados para que solo tú (o tus invitados) puedan verlos. En producción recibirás un enlace seguro en tu correo para entrar desde cualquier dispositivo.
+          No necesitas contraseña. Tu correo identifica tus rincones y libros privados para que solo tú (o tus invitados) puedan verlos desde cualquier dispositivo.
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -130,6 +201,77 @@ export const EmailAccessModal: React.FC<EmailAccessModalProps> = ({
             </button>
           </div>
         </form>
+
+        {isSupabaseConfigured && (
+          <div
+            style={{
+              marginTop: '1rem',
+              padding: '0.85rem',
+              borderRadius: '12px',
+              background: 'rgba(6, 173, 162, 0.07)',
+              border: '1px solid rgba(6, 173, 162, 0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.55rem',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', fontWeight: 600, color: '#06ada2' }}>
+                <ShieldCheck size={15} />
+                {authEmail ? `Sesión verificada: ${authEmail}` : 'Verificación en la nube (OTP)'}
+              </span>
+              {authEmail && (
+                <button type="button" className="btn-secondary" onClick={handleCloudSignOut} style={{ fontSize: '0.72rem', padding: '0.28rem 0.55rem' }}>
+                  <LogOut size={12} />
+                  Cerrar sesión
+                </button>
+              )}
+            </div>
+
+            {!authEmail && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                <div style={{ display: 'flex', gap: '0.45rem' }}>
+                  <button type="button" className="btn-secondary" onClick={handleSendOtp} style={{ fontSize: '0.78rem' }}>
+                    <KeyRound size={13} />
+                    Enviar código al correo
+                  </button>
+                </div>
+                {otpSent && (
+                  <div style={{ display: 'flex', gap: '0.45rem' }}>
+                    <input
+                      className="input-field"
+                      style={{ fontSize: '0.82rem', padding: '0.45rem 0.7rem' }}
+                      placeholder="Código de 6 dígitos"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value)}
+                    />
+                    <button type="button" className="btn-primary" onClick={handleVerifyOtp} style={{ fontSize: '0.78rem', flexShrink: 0 }}>
+                      Verificar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {authStatus && (
+              <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>{authStatus}</div>
+            )}
+
+            {usage && (
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', borderTop: '1px solid rgba(6,173,162,0.18)', paddingTop: '0.45rem' }}>
+                <div>
+                  Cuota DB: {(usage.dbBytes / (1024 * 1024)).toFixed(1)} MB ({usage.dbPercent.toFixed(1)}%) ·
+                  Storage: {(usage.storageBytes / (1024 * 1024)).toFixed(1)} MB ({usage.storagePercent.toFixed(1)}%)
+                </div>
+                {usage.alertLevel !== 'ok' && (
+                  <div style={{ color: usage.alertLevel === 'critical_85' ? '#b43c3c' : '#a86b15', fontWeight: 600 }}>
+                    Alerta operativa: consumo superior al {usage.alertLevel === 'critical_85' ? '85%' : '70%'} de la cuota gratuita.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div
           style={{

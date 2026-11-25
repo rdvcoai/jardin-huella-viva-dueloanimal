@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BookHeart, Compass, Flame, MessageSquarePlus, Plus, Send, X } from 'lucide-react';
 import { submitCloudSuggestion } from '../lib/supabase';
+import { isTurnstileEnabled, TurnstileWidget } from './TurnstileWidget';
 
 interface QuickGuideModalProps {
   onClose: () => void;
@@ -15,10 +16,12 @@ export const QuickGuideModal: React.FC<QuickGuideModalProps> = ({
 }) => {
   const [suggestion, setSuggestion] = useState('');
   const [suggestionSent, setSuggestionSent] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
 
   const handleSuggestionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!suggestion.trim()) return;
+    if (isTurnstileEnabled && !turnstileToken) return;
     const id = `sug-${Date.now()}`;
     const trimmed = suggestion.trim();
     try {
@@ -36,7 +39,7 @@ export const QuickGuideModal: React.FC<QuickGuideModalProps> = ({
     } catch {
       // ignore storage errors
     }
-    void submitCloudSuggestion(id, trimmed);
+    void submitCloudSuggestion(id, trimmed, turnstileToken);
     setSuggestion('');
     setSuggestionSent(true);
   };
@@ -144,18 +147,21 @@ export const QuickGuideModal: React.FC<QuickGuideModalProps> = ({
               Gracias por compartir tu idea. Tu sugerencia fue guardada con cariño para seguir cuidando y mejorando este espacio.
             </div>
           ) : (
-            <form onSubmit={handleSuggestionSubmit} style={{ display: 'flex', gap: '0.45rem' }}>
-              <input
-                className="input-field"
-                style={{ fontSize: '0.83rem', padding: '0.48rem 0.75rem' }}
-                placeholder="¿Qué te gustaría que agreguemos o mejoremos?"
-                value={suggestion}
-                onChange={(e) => setSuggestion(e.target.value)}
-              />
-              <button type="submit" className="btn-secondary" style={{ flexShrink: 0, fontSize: '0.8rem' }}>
-                <Send size={13} />
-                Enviar
-              </button>
+            <form onSubmit={handleSuggestionSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+              <div style={{ display: 'flex', gap: '0.45rem' }}>
+                <input
+                  className="input-field"
+                  style={{ fontSize: '0.83rem', padding: '0.48rem 0.75rem' }}
+                  placeholder="¿Qué te gustaría que agreguemos o mejoremos?"
+                  value={suggestion}
+                  onChange={(e) => setSuggestion(e.target.value)}
+                />
+                <button type="submit" className="btn-secondary" style={{ flexShrink: 0, fontSize: '0.8rem' }}>
+                  <Send size={13} />
+                  Enviar
+                </button>
+              </div>
+              <TurnstileWidget onToken={setTurnstileToken} />
             </form>
           )}
         </div>
