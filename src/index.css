@@ -266,7 +266,7 @@ select {
 
 @media (max-width: 900px) {
   .directory-list-main {
-    padding: calc(6.5rem + env(safe-area-inset-top)) 1rem 3rem;
+    padding: calc(7.5rem + env(safe-area-inset-top)) 1rem 3rem;
   }
 
   .hud-mobile-only {
