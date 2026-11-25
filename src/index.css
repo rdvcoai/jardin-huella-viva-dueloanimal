@@ -215,6 +215,44 @@ select {
   display: none;
 }
 
+.hud-desktop-only {
+  display: inline-flex;
+}
+
+.hud-desktop-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.hud-dpad {
+  position: fixed;
+  bottom: 3.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 18;
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-template-rows: repeat(2, 44px);
+  gap: 0.35rem;
+  pointer-events: auto;
+  user-select: none;
+  touch-action: none;
+}
+
+.podcast-dock {
+  position: fixed;
+  bottom: 3.6rem;
+  left: 1rem;
+  z-index: 22;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  max-width: calc(100vw - 2rem);
+}
+
 .hud-collapsible {
   display: flex;
   flex-wrap: wrap;
@@ -227,22 +265,58 @@ select {
     display: inline-flex;
   }
 
+  .hud-desktop-only,
+  .hud-desktop-group,
   .hud-collapsible {
-    display: none;
+    display: none !important;
   }
 
-  .hud-collapsible.is-open {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    width: 100%;
-    padding: 0.55rem;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.94);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border: 1px solid rgba(93, 193, 185, 0.28);
-    box-shadow: 0 12px 28px -10px rgba(0, 0, 0, 0.14);
+  .btn-primary,
+  .btn-secondary,
+  .btn-icon {
+    min-height: 44px;
+  }
+
+  .btn-icon {
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .hud-hide-mobile {
+    display: none !important;
+  }
+
+  .hud-dpad {
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    right: 0.75rem;
+    left: auto;
+    transform: none;
+  }
+
+  .podcast-dock {
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    left: 0.5rem;
+    max-width: calc(100vw - 172px);
+  }
+
+  .podcast-dock a,
+  .podcast-dock button {
+    min-height: 44px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .podcast-dock {
+    max-width: calc(100vw - 166px);
+  }
+
+  .podcast-dock a {
+    padding: 0.35rem 0.55rem !important;
+    font-size: 0.7rem !important;
+    max-width: 102px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 

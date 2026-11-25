@@ -73,7 +73,8 @@ export const App: React.FC = () => {
   const [lang, setLang] = useState<SupportedLang>(() =>
     detectLanguage(loadStored<UserProfile>(STORAGE_PROFILE, { email: '', grievingName: '', country: '' }).country)
   );
-  const ownerId = userProfile.email ? `email:${userProfile.email}` : deviceOwnerId;
+  const [authUid, setAuthUid] = useState<string | null>(null);
+  const ownerId = authUid ? `uid:${authUid}` : deviceOwnerId;
   const [memorials, setMemorials] = useState<Memorial[]>(() => {
     const stored = loadStored(STORAGE_MEMORIALS, DEMO_MEMORIALS).filter(
       (m) => !(m.ownerId === 'demo-owner' && !m.photoUrl)
@@ -91,7 +92,6 @@ export const App: React.FC = () => {
   const [deletedIds, setDeletedIds] = useState<string[]>(() =>
     loadStored(STORAGE_DELETED_IDS, [])
   );
-  const [authUid, setAuthUid] = useState<string | null>(null);
   const [cloudTotalMemorials, setCloudTotalMemorials] = useState<number | null>(null);
 
   const [hasEntered, setHasEntered] = useState(false);
@@ -273,7 +273,7 @@ export const App: React.FC = () => {
       }
       // Create private draft book linked to this memorial
       const newBook: MemoryBook = {
-        id: `book-${Date.now()}`,
+        id: `book-${crypto.randomUUID()}`,
         ownerId: memorial.ownerId === 'demo-owner' ? ownerId : memorial.ownerId,
         memorialId: memorial.id,
         title: 'Nuestra historia: un libro de la vida que compartimos',
@@ -302,7 +302,7 @@ export const App: React.FC = () => {
         return;
       }
       const newBook: MemoryBook = {
-        id: `book-${Date.now()}`,
+        id: `book-${crypto.randomUUID()}`,
         ownerId,
         title: 'Nuestra historia: un libro de la vida que compartimos',
         subtitle: 'Libro de recuerdos',
@@ -431,7 +431,7 @@ export const App: React.FC = () => {
 
     const newMemorial: Memorial = {
       ...data,
-      id: `mem-${Date.now()}`,
+      id: `mem-${crypto.randomUUID()}`,
       position: [x, 0, z],
       rotationY,
       objectMemories: [],

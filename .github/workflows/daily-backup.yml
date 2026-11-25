@@ -1,4 +1,4 @@
-name: Daily Supabase Backup & Quota Check
+name: Daily Encrypted Supabase Backup & Quota Check
 
 on:
   schedule:
@@ -14,15 +14,21 @@ jobs:
         with:
           node-version: '20'
       - run: npm ci
-      - name: Run independent PostgreSQL & Storage backup
+      - name: Run encrypted PostgreSQL & Storage backup
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
           BACKUP_DIR: backups/daily
-        run: node scripts/backup-supabase.mjs
-      - name: Upload backup artifact (90d retention, $0 cost)
+        run: |
+          if [ -z "$BACKUP_ENCRYPTION_KEY" ]; then
+            echo "FAIL-CLOSED: BACKUP_ENCRYPTION_KEY secret is required in public repository"
+            exit 1
+          fi
+          node scripts/backup-supabase.mjs
+      - name: Upload encrypted backup artifact (30d retention, $0 cost)
         uses: actions/upload-artifact@v4
         with:
-          name: jhv-supabase-backup-${{ github.run_number }}
+          name: jhv-supabase-backup-enc-${{ github.run_number }}
           path: backups/daily
-          retention-days: 90
+          retention-days: 30

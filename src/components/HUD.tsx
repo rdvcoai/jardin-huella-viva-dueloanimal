@@ -119,15 +119,15 @@ export const HUD: React.FC<HUDProps> = ({
       <header
         style={{
           position: 'fixed',
-          top: '0.85rem',
-          left: '0.85rem',
-          right: '0.85rem',
+          top: 'max(0.65rem, env(safe-area-inset-top))',
+          left: '0.75rem',
+          right: '0.75rem',
           zIndex: 20,
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: '0.55rem',
+          gap: '0.45rem',
           pointerEvents: 'none',
         }}
       >
@@ -149,15 +149,26 @@ export const HUD: React.FC<HUDProps> = ({
               display: 'inline-flex',
               alignItems: 'center',
               gap: '0.5rem',
-              padding: '0.48rem 0.95rem',
+              padding: '0.48rem 0.9rem',
+              minHeight: '44px',
               borderRadius: '999px',
               cursor: 'pointer',
               color: 'var(--text-espresso)',
             }}
           >
-            <span className="font-serif-editorial" style={{ fontSize: 'clamp(0.86rem, 2.6vw, 1.05rem)', fontWeight: 600 }}>
-              Jardín Huella Viva · Siembra su recuerdo
+            <span className="font-serif-editorial" style={{ fontSize: 'clamp(0.84rem, 2.6vw, 1.05rem)', fontWeight: 600 }}>
+              Jardín Huella Viva
             </span>
+          </button>
+
+          <button
+            type="button"
+            className="btn-primary hud-mobile-only"
+            onClick={onOpenAdd}
+            style={{ padding: '0.5rem 0.85rem', fontSize: '0.8rem' }}
+          >
+            <Plus size={15} />
+            Crear homenaje
           </button>
 
           <button
@@ -167,14 +178,13 @@ export const HUD: React.FC<HUDProps> = ({
             aria-expanded={mobileMenuOpen}
             aria-label="Abrir menú del jardín"
           >
-            {mobileMenuOpen ? <X size={15} /> : <Menu size={15} />}
+            {mobileMenuOpen ? <X size={16} /> : <Menu size={16} />}
             Menú
           </button>
 
           <div
-            className={`hud-collapsible ${mobileMenuOpen ? 'is-open' : ''}`}
+            className="hud-collapsible"
             style={{
-              display: undefined,
               flexWrap: 'wrap',
               alignItems: 'center',
               gap: '0.45rem',
@@ -368,13 +378,10 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         </nav>
 
-        {/* Right actions */}
+        {/* Right actions (desktop) */}
         <div
+          className="hud-desktop-group"
           style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            gap: '0.45rem',
             pointerEvents: 'auto',
           }}
         >
@@ -535,21 +542,8 @@ export const HUD: React.FC<HUDProps> = ({
       {viewMode === '3d' && (
         <>
           <div
+            className="hud-dpad"
             aria-label="Controles de navegación"
-            style={{
-              position: 'fixed',
-              bottom: '3.25rem',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: 18,
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 42px)',
-              gridTemplateRows: 'repeat(2, 42px)',
-              gap: '0.35rem',
-              pointerEvents: 'auto',
-              userSelect: 'none',
-              touchAction: 'none',
-            }}
           >
             <div />
             <button
@@ -560,8 +554,8 @@ export const HUD: React.FC<HUDProps> = ({
               onPointerLeave={() => onNavigateKey('arrowup', false)}
               onPointerCancel={() => onNavigateKey('arrowup', false)}
               style={{
-                width: '42px',
-                height: '42px',
+                width: '44px',
+                height: '44px',
                 borderRadius: '12px',
                 border: '1.5px solid #64caca',
                 background: 'rgba(255, 255, 255, 0.84)',
@@ -584,8 +578,8 @@ export const HUD: React.FC<HUDProps> = ({
               onPointerLeave={() => onNavigateKey('arrowleft', false)}
               onPointerCancel={() => onNavigateKey('arrowleft', false)}
               style={{
-                width: '42px',
-                height: '42px',
+                width: '44px',
+                height: '44px',
                 borderRadius: '12px',
                 border: '1.5px solid #64caca',
                 background: 'rgba(255, 255, 255, 0.84)',
@@ -607,8 +601,8 @@ export const HUD: React.FC<HUDProps> = ({
               onPointerLeave={() => onNavigateKey('arrowdown', false)}
               onPointerCancel={() => onNavigateKey('arrowdown', false)}
               style={{
-                width: '42px',
-                height: '42px',
+                width: '44px',
+                height: '44px',
                 borderRadius: '12px',
                 border: '1.5px solid #64caca',
                 background: 'rgba(255, 255, 255, 0.84)',
@@ -630,8 +624,8 @@ export const HUD: React.FC<HUDProps> = ({
               onPointerLeave={() => onNavigateKey('arrowright', false)}
               onPointerCancel={() => onNavigateKey('arrowright', false)}
               style={{
-                width: '42px',
-                height: '42px',
+                width: '44px',
+                height: '44px',
                 borderRadius: '12px',
                 border: '1.5px solid #64caca',
                 background: 'rgba(255, 255, 255, 0.84)',
@@ -673,7 +667,7 @@ export const HUD: React.FC<HUDProps> = ({
         href="https://dueloanimal.co"
         target="_blank"
         rel="noopener noreferrer"
-        className="glass-pill"
+        className="glass-pill hud-hide-mobile"
         title="Ir a dueloanimal.co"
         style={{
           position: 'fixed',
@@ -691,6 +685,207 @@ export const HUD: React.FC<HUDProps> = ({
       >
         dueloanimal.co ↗
       </a>
+
+      {/* Mobile bottom drawer for secondary actions */}
+      {mobileMenuOpen && (
+        <div
+          className="hud-mobile-only"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 35,
+            background: 'rgba(30, 42, 52, 0.38)',
+            display: 'flex',
+            alignItems: 'flex-end',
+          }}
+          onClick={() => setMobileMenuOpen(false)}
+        >
+          <div
+            className="glass-panel custom-scroll"
+            style={{
+              width: '100%',
+              maxHeight: '76dvh',
+              overflowY: 'auto',
+              borderRadius: '20px 20px 0 0',
+              padding: '1rem 1rem calc(1rem + env(safe-area-inset-bottom))',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.55rem',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="font-serif-editorial" style={{ fontWeight: 600, fontSize: '1rem' }}>
+                Opciones del jardín ({memorialsCount})
+              </span>
+              <button type="button" className="btn-icon" onClick={() => setMobileMenuOpen(false)} aria-label="Cerrar menú">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.45rem' }}>
+              <input
+                type="search"
+                className="input-field"
+                placeholder="Buscar homenaje por nombre..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+
+            {searchQuery.trim().length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                {matchingMemorials.length === 0 ? (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Sin coincidencias.</div>
+                ) : (
+                  matchingMemorials.slice(0, 5).map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      className="btn-secondary"
+                      style={{ justifyContent: 'flex-start' }}
+                      onClick={() => {
+                        setSearchQuery('');
+                        setMobileMenuOpen(false);
+                        onSelectSearchResult(m);
+                      }}
+                    >
+                      {m.name}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+
+            <select
+              aria-label="Seleccionar santuario móvil"
+              value={currentSanctuary}
+              onChange={(e) => {
+                onChangeSanctuary(Number(e.target.value));
+                setMobileMenuOpen(false);
+              }}
+              className="input-field"
+              style={{ minHeight: '44px' }}
+            >
+              {Array.from({ length: totalSanctuaries }).map((_, i) => (
+                <option key={i} value={i}>
+                  Santuario {i + 1} (hasta 30 altares)
+                </option>
+              ))}
+            </select>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.45rem' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  onToggleViewMode();
+                  setMobileMenuOpen(false);
+                }}
+              >
+                {viewMode === '3d' ? <List size={15} /> : <Trees size={15} />}
+                {viewMode === '3d' ? 'Vista en lista' : 'Jardín 3D'}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  onOpenEmailAccess();
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <Mail size={15} />
+                Identidad / Clave
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  onOpenBook();
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <BookHeart size={15} />
+                Nuestro libro
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  onOpenBreathing();
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <Wind size={15} />
+                Respiremos
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  onOpenServices();
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <Info size={15} />
+                Acompañamiento
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  onOpenGuide();
+                  setMobileMenuOpen(false);
+                }}
+              >
+                <HelpCircle size={15} />
+                {t.howItWorks}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                <button type="button" className="btn-secondary" onClick={() => onChangeTimeMode('auto')}>
+                  <Clock size={14} /> Auto
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => onChangeTimeMode('day')}>
+                  <Sun size={14} /> Día
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => onChangeTimeMode('night')}>
+                  <Moon size={14} /> Noche
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: '0.35rem' }}>
+                <button type="button" className="btn-icon" onClick={onToggleAudio} aria-label="Sonido">
+                  {audioEnabled ? <Volume2 size={17} /> : <VolumeX size={17} />}
+                </button>
+                <select
+                  aria-label="Idioma móvil"
+                  value={lang}
+                  onChange={(e) => onChangeLang(e.target.value as SupportedLang)}
+                  className="input-field"
+                  style={{ width: 'auto', minHeight: '44px' }}
+                >
+                  <option value="es">ES</option>
+                  <option value="en">EN</option>
+                  <option value="de">DE</option>
+                  <option value="pt">PT</option>
+                  <option value="fr">FR</option>
+                </select>
+              </div>
+            </div>
+
+            <a
+              href="https://dueloanimal.co"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textAlign: 'center', fontSize: '0.8rem', color: '#06ada2', fontWeight: 600, paddingTop: '0.25rem' }}
+            >
+              dueloanimal.co ↗
+            </a>
+          </div>
+        </div>
+      )}
     </>
   );
 };

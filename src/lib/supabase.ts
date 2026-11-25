@@ -33,6 +33,8 @@ export interface UsageStats {
   alertLevel: 'ok' | 'warning_70' | 'critical_85';
 }
 
+const STORAGE_PREFIX = 'storage://memorial-photos/';
+
 async function sha256Hex(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -47,28 +49,93 @@ export async function getAuthenticatedUser(): Promise<User | null> {
   return data.user ?? null;
 }
 
-export async function signInWithEmailOtp(email: string): Promise<CloudWriteResult> {
-  if (!supabase) return { ok: false, error: 'Supabase no configurado' };
-  const { error } = await supabase.auth.signInWithOtp({
-    email: email.trim().toLowerCase(),
-    options: { shouldCreateUser: true },
-  });
-  return error ? { ok: false, error: error.message } : { ok: true };
-}
-
-export async function verifyEmailOtp(email: string, token: string): Promise<CloudWriteResult> {
-  if (!supabase) return { ok: false, error: 'Supabase no configurado' };
-  const { error } = await supabase.auth.verifyOtp({
-    email: email.trim().toLowerCase(),
-    token: token.trim(),
-    type: 'email',
-  });
-  return error ? { ok: false, error: error.message } : { ok: true };
+/**
+ * Ensures an active Supabase Anonymous Auth session on the first action
+ * requiring ownership (creating/editing a memorial or memory book).
+ */
+export async function ensureAnonymousSession(): Promise<User | null> {
+  if (!supabase) return null;
+  const existing = await getAuthenticatedUser();
+  if (existing) return existing;
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error) return null;
+  return data.user ?? null;
 }
 
 export async function signOutCloud(): Promise<void> {
   if (!supabase) return;
   await supabase.auth.signOut();
+}
+
+export async function registerOrRotateRecoveryKey(): Promise<{
+  ok: boolean;
+  recoveryKey?: string;
+  keyHint?: string;
+  error?: string;
+}> {
+  if (!supabase) return { ok: false, error: 'Supabase no configurado' };
+  const user = await ensureAnonymousSession();
+  if (!user) return { ok: false, error: 'No se pudo iniciar sesión anónima' };
+
+  const { data, error } = await supabase.functions.invoke('recovery-auth', {
+    body: { action: 'register_or_rotate' },
+  });
+  if (error) return { ok: false, error: error.message };
+  if (data && typeof data === 'object' && 'error' in data) {
+    return { ok: false, error: String((data as { error: unknown }).error) };
+  }
+  return {
+    ok: true,
+    recoveryKey: (data as { recoveryKey?: string }).recoveryKey,
+    keyHint: (data as { keyHint?: string }).keyHint,
+  };
+}
+
+export async function revokeRecoveryKey(): Promise<CloudWriteResult> {
+  if (!supabase) return { ok: false, error: 'Supabase no configurado' };
+  const { data, error } = await supabase.functions.invoke('recovery-auth', {
+    body: { action: 'revoke' },
+  });
+  if (error) return { ok: false, error: error.message };
+  if (data && typeof data === 'object' && 'error' in data) {
+    return { ok: false, error: String((data as { error: unknown }).error) };
+  }
+  return { ok: true };
+}
+
+export async function recoverAccountWithKey(
+  recoveryKey: string,
+  turnstileToken: string
+): Promise<CloudWriteResult> {
+  if (!supabase) return { ok: false, error: 'Supabase no configurado' };
+  const user = await ensureAnonymousSession();
+  if (!user) return { ok: false, error: 'No se pudo iniciar sesión de recuperación' };
+
+  const { data, error } = await supabase.functions.invoke('recovery-auth', {
+    body: { action: 'recover', recoveryKey, turnstileToken },
+  });
+  if (error) return { ok: false, error: error.message };
+  if (data && typeof data === 'object' && 'error' in data) {
+    return { ok: false, error: String((data as { error: unknown }).error) };
+  }
+  return { ok: true };
+}
+
+export async function getRecoveryKeyHint(): Promise<{ keyHint: string; rotatedAt: string; revokedAt: string | null } | null> {
+  if (!supabase) return null;
+  const user = await getAuthenticatedUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from('user_recovery_credentials')
+    .select('key_hint, rotated_at, revoked_at')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    keyHint: String(data.key_hint),
+    rotatedAt: String(data.rotated_at),
+    revokedAt: (data.revoked_at as string | null) ?? null,
+  };
 }
 
 export async function uploadDataUrlToStorage(
@@ -80,15 +147,42 @@ export async function uploadDataUrlToStorage(
   if (!supabase || !dataUrl.startsWith('data:image/')) return dataUrl;
   const blob = dataUrlToBlob(dataUrl);
   const ext = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg';
-  const path = `${ownerUuid}/${memorialId}/${slot}-${Date.now()}.${ext}`;
+  const path = `${ownerUuid}/${memorialId}/${slot}-${crypto.randomUUID()}.${ext}`;
 
   const { error } = await supabase.storage
     .from('memorial-photos')
     .upload(path, blob, { contentType: blob.type, upsert: true });
 
-  if (error) return dataUrl;
-  const { data } = supabase.storage.from('memorial-photos').getPublicUrl(path);
-  return data.publicUrl || dataUrl;
+  if (error) {
+    throw new Error(`Error subiendo fotografía a Storage: ${error.message}`);
+  }
+  return `${STORAGE_PREFIX}${path}`;
+}
+
+async function resolveSignedPhotoUrls(memorials: Memorial[]): Promise<Memorial[]> {
+  if (!supabase) return memorials;
+  const paths = new Set<string>();
+  for (const m of memorials) {
+    if (m.photoUrl?.startsWith(STORAGE_PREFIX)) {
+      paths.add(m.photoUrl.slice(STORAGE_PREFIX.length));
+    }
+  }
+  if (paths.size === 0) return memorials;
+
+  const pathList = Array.from(paths);
+  const { data } = await supabase.storage.from('memorial-photos').createSignedUrls(pathList, 3600);
+  if (!data) return memorials;
+
+  const urlMap = new Map<string, string>();
+  data.forEach((item) => {
+    if (item.path && item.signedUrl) {
+      urlMap.set(`${STORAGE_PREFIX}${item.path}`, item.signedUrl);
+    }
+  });
+
+  return memorials.map((m) =>
+    m.photoUrl && urlMap.has(m.photoUrl) ? { ...m, photoUrl: urlMap.get(m.photoUrl)! } : m
+  );
 }
 
 function sanitizeMemorialForPublic(m: Memorial): Memorial {
@@ -138,7 +232,7 @@ export async function fetchCloudMemorialsPage(
     }
   }
 
-  const memorials = data.map((row) => {
+  const rawMemorials = data.map((row) => {
     const base = row.data as Memorial;
     const priv = privateMap.get(row.id as string);
     if (!priv) return sanitizeMemorialForPublic(base);
@@ -150,24 +244,28 @@ export async function fetchCloudMemorialsPage(
     };
   });
 
+  const memorials = await resolveSignedPhotoUrls(rawMemorials);
   return { memorials, totalCount: count ?? memorials.length };
 }
 
 export async function upsertCloudMemorial(memorial: Memorial): Promise<CloudWriteResult> {
   if (!supabase) return { ok: false, error: 'Supabase no configurado' };
   if (memorial.ownerId === 'demo-owner') {
-    // Excluir contenido demo de la persistencia productiva
     return { ok: true };
   }
 
-  const user = await getAuthenticatedUser();
+  const user = await ensureAnonymousSession();
   if (!user) {
-    return { ok: false, error: 'Inicia sesión para guardar en la nube' };
+    return { ok: false, error: 'No se pudo autenticar la sesión' };
   }
 
   let prepared = { ...memorial };
   if (prepared.photoUrl?.startsWith('data:image/')) {
-    prepared.photoUrl = await uploadDataUrlToStorage(user.id, prepared.id, prepared.photoUrl, 'cover');
+    try {
+      prepared.photoUrl = await uploadDataUrlToStorage(user.id, prepared.id, prepared.photoUrl, 'cover');
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'Error subiendo fotografía' };
+    }
   }
 
   const sanitized = sanitizeMemorialForPublic(prepared);
@@ -194,6 +292,18 @@ export async function upsertCloudMemorial(memorial: Memorial): Promise<CloudWrit
 
   if (memErr) return { ok: false, error: memErr.message };
 
+  if (inviteCodeHash) {
+    await supabase.from('memorial_invites').upsert(
+      {
+        memorial_id: memorial.id,
+        owner_uuid: user.id,
+        code_hash: inviteCodeHash,
+        max_uses: 25,
+      },
+      { onConflict: 'id' }
+    );
+  }
+
   const { error: privErr } = await supabase.from('memorial_private_data').upsert(
     {
       memorial_id: memorial.id,
@@ -214,6 +324,15 @@ export async function deleteCloudMemorial(id: string): Promise<CloudWriteResult>
   const user = await getAuthenticatedUser();
   if (!user) return { ok: false, error: 'Autenticación requerida' };
 
+  // Clean up Storage objects in owner's memorial folder before deleting row
+  const prefix = `${user.id}/${id}`;
+  const { data: files } = await supabase.storage.from('memorial-photos').list(prefix);
+  if (files && files.length > 0) {
+    await supabase.storage
+      .from('memorial-photos')
+      .remove(files.map((f) => `${prefix}/${f.name}`));
+  }
+
   const { error } = await supabase
     .from('memorials')
     .delete()
@@ -223,21 +342,30 @@ export async function deleteCloudMemorial(id: string): Promise<CloudWriteResult>
   return error ? { ok: false, error: error.message } : { ok: true };
 }
 
+export async function revokeMemorialInvites(memorialId: string): Promise<CloudWriteResult> {
+  if (!supabase) return { ok: false, error: 'Supabase no configurado' };
+  const { error } = await supabase.rpc('revoke_memorial_invites', { p_memorial_id: memorialId });
+  return error ? { ok: false, error: error.message } : { ok: true };
+}
+
 export async function redeemCloudInviteCode(code: string): Promise<Memorial[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.rpc('redeem_memorial_invite', {
     p_code: code.trim().toUpperCase(),
   });
   if (error || !Array.isArray(data)) return [];
-  return data
+  const raw = data
     .map((row: { data?: Memorial }) => row.data)
     .filter((m): m is Memorial => Boolean(m))
     .map(sanitizeMemorialForPublic);
+  return resolveSignedPhotoUrls(raw);
 }
 
-export async function fetchCloudBooks(): Promise<MemoryBook[] | null> {
+export async function fetchCloudBooksPage(page = 0, pageSize = 30): Promise<MemoryBook[] | null> {
   if (!supabase) return null;
   const user = await getAuthenticatedUser();
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
 
   const [ownedRes, publishedRes] = await Promise.all([
     user
@@ -247,11 +375,13 @@ export async function fetchCloudBooks(): Promise<MemoryBook[] | null> {
           .eq('owner_uuid', user.id)
           .is('deleted_at', null)
           .order('created_at', { ascending: true })
+          .range(from, to)
       : Promise.resolve({ data: null, error: null }),
     supabase
       .from('published_memory_books')
       .select('book_id, owner_uuid, memorial_id, privacy, snapshot, published_at')
-      .order('published_at', { ascending: true }),
+      .order('published_at', { ascending: true })
+      .range(from, to),
   ]);
 
   const map = new Map<string, MemoryBook>();
@@ -288,10 +418,12 @@ export async function fetchCloudBooks(): Promise<MemoryBook[] | null> {
   return Array.from(map.values());
 }
 
+export const fetchCloudBooks = () => fetchCloudBooksPage(0, 30);
+
 export async function upsertCloudBook(book: MemoryBook): Promise<CloudWriteResult> {
   if (!supabase) return { ok: false, error: 'Supabase no configurado' };
-  const user = await getAuthenticatedUser();
-  if (!user) return { ok: false, error: 'Inicia sesión para guardar el libro' };
+  const user = await ensureAnonymousSession();
+  if (!user) return { ok: false, error: 'No se pudo autenticar la sesión' };
 
   const { error: bookErr } = await supabase.from('memory_books').upsert(
     {
