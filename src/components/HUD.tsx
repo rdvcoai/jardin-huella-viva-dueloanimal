@@ -795,7 +795,7 @@ export const HUD: React.FC<HUDProps> = ({
                 }}
               >
                 <Mail size={15} />
-                Identidad / Clave
+                Tus datos
               </button>
               <button
                 type="button"

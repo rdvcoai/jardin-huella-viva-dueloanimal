@@ -248,7 +248,10 @@ export async function fetchCloudMemorialsPage(
   return { memorials, totalCount: count ?? memorials.length };
 }
 
-export async function upsertCloudMemorial(memorial: Memorial): Promise<CloudWriteResult> {
+export async function upsertCloudMemorial(
+  memorial: Memorial,
+  profileEmail?: string
+): Promise<CloudWriteResult> {
   if (!supabase) return { ok: false, error: 'Supabase no configurado' };
   if (memorial.ownerId === 'demo-owner') {
     return { ok: true };
@@ -275,6 +278,12 @@ export async function upsertCloudMemorial(memorial: Memorial): Promise<CloudWrit
       ? await sha256Hex(normalizedCode)
       : null;
 
+  const normalizedEmail = profileEmail?.trim().toLowerCase() || '';
+  const emailHash =
+    normalizedEmail.length >= 5 && normalizedEmail.includes('@')
+      ? await sha256Hex(normalizedEmail)
+      : null;
+
   const { error: memErr } = await supabase.from('memorials').upsert(
     {
       id: memorial.id,
@@ -282,6 +291,7 @@ export async function upsertCloudMemorial(memorial: Memorial): Promise<CloudWrit
       owner_id: memorial.ownerId,
       privacy: memorial.privacy,
       invite_code_hash: inviteCodeHash,
+      email_hash: emailHash,
       data: sanitized,
       is_demo: false,
       deleted_at: null,
@@ -352,6 +362,21 @@ export async function redeemCloudInviteCode(code: string): Promise<Memorial[]> {
   if (!supabase) return [];
   const { data, error } = await supabase.rpc('redeem_memorial_invite', {
     p_code: code.trim().toUpperCase(),
+  });
+  if (error || !Array.isArray(data)) return [];
+  const raw = data
+    .map((row: { data?: Memorial }) => row.data)
+    .filter((m): m is Memorial => Boolean(m))
+    .map(sanitizeMemorialForPublic);
+  return resolveSignedPhotoUrls(raw);
+}
+
+export async function findPublicMemorialsByEmail(email: string): Promise<Memorial[]> {
+  if (!supabase) return [];
+  const clean = email.trim().toLowerCase();
+  if (clean.length < 5 || !clean.includes('@')) return [];
+  const { data, error } = await supabase.rpc('find_public_memorials_by_email', {
+    p_email: clean,
   });
   if (error || !Array.isArray(data)) return [];
   const raw = data

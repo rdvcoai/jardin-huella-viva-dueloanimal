@@ -17,8 +17,10 @@ import { detectLanguage, SupportedLang } from './i18n/translations';
 import {
   deleteCloudBook,
   deleteCloudMemorial,
+  ensureAnonymousSession,
   fetchCloudBooks,
   fetchCloudMemorialsPage,
+  findPublicMemorialsByEmail,
   isSupabaseConfigured,
   redeemCloudInviteCode,
   supabase,
@@ -377,6 +379,17 @@ export const App: React.FC = () => {
     }
   };
 
+  const mergeDiscoveredPublicMemorials = (found: Memorial[]) => {
+    if (found.length === 0) return;
+    setMemorials((prev) => {
+      const map = new Map(prev.map((m) => [m.id, m]));
+      found.forEach((m) => {
+        if (!map.has(m.id)) map.set(m.id, m);
+      });
+      return Array.from(map.values());
+    });
+  };
+
   const handleEnter = (profile: UserProfile) => {
     userProfileRef.current = profile;
     setUserProfile(profile);
@@ -388,6 +401,12 @@ export const App: React.FC = () => {
     if (!audioEnabled) {
       soundRef.current?.start();
       setAudioEnabled(true);
+    }
+    if (isSupabaseConfigured) {
+      void ensureAnonymousSession();
+      if (profile.email) {
+        void findPublicMemorialsByEmail(profile.email).then(mergeDiscoveredPublicMemorials);
+      }
     }
     maybeOpenGuideForFirstEmail(profile.email);
   };
@@ -445,7 +464,7 @@ export const App: React.FC = () => {
     const nextSanctuary = Math.floor(visibleMemorials.length / ALTARS_PER_SANCTUARY);
     setCurrentSanctuary(nextSanctuary);
     setMemorials((prev) => [...prev, newMemorial]);
-    void upsertCloudMemorial(newMemorial);
+    void upsertCloudMemorial(newMemorial, userProfileRef.current.email);
     setActiveModal('none');
     setTimeout(() => {
       if (viewMode === '3d') {
@@ -574,7 +593,7 @@ export const App: React.FC = () => {
             onUpdateMemorial={(updated) => {
               setMemorials((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
               setSaveStatus('Guardando...');
-              void upsertCloudMemorial(updated).then((res) => {
+              void upsertCloudMemorial(updated, userProfileRef.current.email).then((res) => {
                 setSaveStatus(res.ok ? 'Guardado' : 'No se pudo guardar');
               });
             }}
@@ -661,6 +680,7 @@ export const App: React.FC = () => {
             setUserProfile(p);
             maybeOpenGuideForFirstEmail(p.email);
           }}
+          onPublicMemorialsFound={mergeDiscoveredPublicMemorials}
           onExportBackup={() => {
             const payload = JSON.stringify({ memorials, books }, null, 2);
             const blob = new Blob([payload], { type: 'application/json' });

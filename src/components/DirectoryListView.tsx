@@ -52,12 +52,12 @@ export const DirectoryListView: React.FC<DirectoryListViewProps> = ({
   return (
     <main
       aria-label="Vista en lista de memoriales"
+      className="directory-list-main"
       style={{
         position: 'fixed',
         inset: 0,
         zIndex: 10,
         overflowY: 'auto',
-        padding: '5.5rem 1.25rem 3rem',
         background: 'linear-gradient(180deg, #f3ece1 0%, #e9dfd0 100%)',
       }}
     >
